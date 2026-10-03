@@ -1,6 +1,8 @@
 #!/bin/sh
-# SaaS install AND upgrade. Run as root from the unpacked folder:  ./install.sh
-# (uninstall: /opt/saas/uninstall.sh [--purge])
+# SaaS install AND upgrade. Run as root from the unpacked folder:
+#   ./install.sh             normal: installs the apt packages it needs
+#   ./install.sh --offline   skip apt entirely (deps already there, e.g. OTA / no network)
+# (uninstall: saas-uninstall [--purge], undo an OTA update: saas-rollback)
 #
 # Upgrade = run the new version's install.sh: the service is stopped cleanly
 # (that's when it saves its state), files are replaced, your config is kept,
@@ -16,6 +18,15 @@
 #   - installs + enables the service for whatever init system is running
 # A fresh install is not started: set [audio] device in the config first.
 set -eu
+
+OFFLINE=0
+for arg in "$@"; do
+	case "$arg" in
+		--offline) OFFLINE=1 ;;
+		-h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+		*) echo "unknown option: $arg (try --help)" >&2; exit 1 ;;
+	esac
+done
 
 PREFIX=/opt/saas
 ETC=/etc/saas
@@ -58,7 +69,9 @@ if [ -n "$OLD_VERSION" ] && svc status; then
 fi
 
 # --- dependencies (distro packages only, no pip) -----------------------------
-if command -v apt-get >/dev/null 2>&1; then
+if [ "$OFFLINE" = 1 ]; then
+	say "offline: skipping apt, only checking what's installed"
+elif command -v apt-get >/dev/null 2>&1; then
 	say "installing packages (apt)"
 	apt-get update
 	apt-get install -y python3 python3-mpv
@@ -79,7 +92,7 @@ mkdir -p "$PREFIX"
 SRC=$HERE
 if ls "$HERE"/patches/*.patch >/dev/null 2>&1; then
 	if ! command -v patch >/dev/null 2>&1; then
-		command -v apt-get >/dev/null 2>&1 && apt-get install -y patch
+		[ "$OFFLINE" = 0 ] && command -v apt-get >/dev/null 2>&1 && apt-get install -y patch
 		command -v patch >/dev/null 2>&1 || die "patches/ has patches but the 'patch' tool is missing"
 	fi
 	SRC=$(mktemp -d)
@@ -90,11 +103,17 @@ fi
 
 # --- files ----------------------------------------------------------------
 say "copying program to $PREFIX"
-rm -rf "$PREFIX/saas"
-cp -r "$SRC/saas" "$SRC/main.py" "$PREFIX/"
-cp "$SRC/VERSION" "$PREFIX/VERSION" 2>/dev/null || true
-install -m 755 "$SRC/uninstall.sh" "$PREFIX/uninstall.sh"
-install -m 755 "$SRC/saas-now.sh" "$PREFIX/saas-now.sh"
+rm -rf "$PREFIX/saas" "$PREFIX/.previous"
+cp -r "$SRC/saas" "$SRC/main.py" "$SRC/pctool.py" "$SRC/VERSION" "$PREFIX/"
+# Root-run tools live outside /opt/saas: /opt/saas belongs to the saas user (so
+# OTA can update it), and root must never execute files that user can change.
+rm -f "$PREFIX/saas-now.sh" "$PREFIX/uninstall.sh"      # pre-0.6.2 locations
+mkdir -p /usr/local/bin /usr/local/sbin
+install -m 755 "$SRC/saas-now.sh" /usr/local/bin/saas-now
+install -m 755 "$SRC/uninstall.sh" /usr/local/sbin/saas-uninstall
+install -m 755 "$SRC/init/saas-rollback" /usr/local/sbin/saas-rollback
+"$PY" -c "import sys; sys.path.insert(0, sys.argv[1]); from saas.core.updater import system_hash; print(system_hash(sys.argv[1]))" \
+	"$SRC" > "$PREFIX/SYSTEM_HASH"
 find "$PREFIX/saas" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
 
 mkdir -p "$ETC"
@@ -124,6 +143,7 @@ for g in audio gpio plugdev; do
 	fi
 done
 mkdir -p "$STATE" && chown saas:saas "$STATE"
+chown -R saas:saas "$PREFIX"      # OTA updates write here
 touch /var/log/saas.log && chown saas:saas /var/log/saas.log
 
 # --- udev auto-mount --------------------------------------------------------
@@ -196,6 +216,9 @@ Done. Next:
   3. as root: $CHECK
   4. $START
   GPIO check: ls -l /dev/gpiochip*   (should be group gpio, crw-rw----)
-  Upgrade later: unpack the new version, run its ./install.sh
-  Uninstall:     $PREFIX/uninstall.sh   (--purge also removes config, state, user)
+  Display:       saas-now        (two status lines for your dashboard)
+  Upgrade:       unpack the new version, run its ./install.sh [--offline]
+  OTA:           DLP6/Update/saas.pub on a stick, press update (U) twice
+  Undo OTA:      saas-rollback
+  Uninstall:     saas-uninstall   (--purge also removes config, state, user)
 EOF

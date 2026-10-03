@@ -43,6 +43,11 @@ DEFAULTS: Dict[str, Any] = {
         "default": "Favorites",    # where "add" goes until you cycle
         "liked": "Liked Songs",    # the like button's playlist (not part of the cycle)
     },
+    "update": {
+        "enabled": True,
+        "file": "DLP6/Update/saas.pub",   # on any stick, relative to its root
+        "confirm_seconds": 20,            # 2nd press within this time installs
+    },
     "state": {
         "file": "",                # empty = don't persist; written only on a clean exit
         "save_interval": None,     # obsolete (state is only saved on exit), still accepted
@@ -200,6 +205,15 @@ def validate(raw: Dict[str, Any]) -> Dict[str, Any]:
         else:
             status["dir"] = os.path.expanduser(status["dir"])
         _num(status, "interval", 0.2, 60, "outputs.status", errors)
+
+    up = cfg["update"]
+    if up["enabled"]:
+        from .playlists import clean_rel as _clean_rel
+        if not isinstance(up["file"], str) or _clean_rel(up["file"]) is None:
+            errors.append("'update.file' must be a relative path on the stick")
+        else:
+            up["file"] = _clean_rel(up["file"])
+        _num(up, "confirm_seconds", 3, 300, "update", errors)
 
     st = cfg["state"]
     if not isinstance(st["file"], str):

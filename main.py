@@ -38,8 +38,13 @@ def make_backend(audio: Dict[str, Any]):
     return MpvBackend(audio["device"], audio["mpv_options"])
 
 
-def build(cfg: Dict[str, Any], bus: Bus):
+def build(cfg: Dict[str, Any], bus: Bus, config_path: str = ""):
     audio, lib, st = cfg["audio"], cfg["library"], cfg["state"]
+    updater = None
+    if cfg["update"]["enabled"]:
+        from saas.core.updater import Updater
+        updater = Updater(os.path.dirname(os.path.abspath(__file__)), os.path.abspath(config_path),
+                          cfg["update"]["file"], cfg["update"]["confirm_seconds"])
     player = Player(
         bus, make_backend(audio),
         extensions=lib["extensions"],
@@ -52,6 +57,7 @@ def build(cfg: Dict[str, Any], bus: Bus):
         playlist_dir=cfg["playlists"]["dir"] if cfg["playlists"]["enabled"] else None,
         default_playlist=cfg["playlists"]["default"],
         liked_playlist=cfg["playlists"]["liked"],
+        updater=updater,
     )
 
     # GPIO is optional hardware: if the chip can't be opened, log it and run
@@ -104,9 +110,10 @@ def build(cfg: Dict[str, Any], bus: Bus):
     return player, inputs, outputs, chip
 
 
-def run(cfg: Dict[str, Any]) -> int:
+def run(cfg: Dict[str, Any], config_path: str = "") -> int:
     bus = Bus()
-    player, inputs, outputs, chip = build(cfg, bus)
+    player, inputs, outputs, chip = build(cfg, bus, config_path)
+    restart = False
     signal.signal(signal.SIGTERM, _on_sigterm)
 
     try:
@@ -116,6 +123,9 @@ def run(cfg: Dict[str, Any]) -> int:
         while True:
             event, data = bus.get()
             if event is Event.QUIT:
+                break
+            if event is Event.RESTART:
+                restart = True
                 break
             player.handle(event, data)
     except (KeyboardInterrupt, Shutdown):
@@ -131,6 +141,13 @@ def run(cfg: Dict[str, Any]) -> int:
             _safe(out.close)
         if chip is not None:
             _safe(chip.close)
+    if restart:
+        # After an OTA update: start the new code in place of this process. Works the
+        # same under any init system or when started by hand (same PID, same terminal).
+        log.info("restarting")
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(sys.executable, [sys.executable, os.path.abspath(__file__), *sys.argv[1:]])
     return 0
 
 
@@ -168,7 +185,7 @@ def main(argv: List[str] = None) -> int:
     if args.check:
         print("config OK")
         return 0
-    return run(cfg)
+    return run(cfg, args.config)
 
 
 if __name__ == "__main__":

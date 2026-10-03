@@ -113,6 +113,17 @@ class PlaylistStore:
             os.fsync(f.fileno())
         os.replace(tmp, final)
 
+    def create_numbered(self, prefix: str = "Playlist") -> str:
+        """Create an empty "<prefix> N" with N = highest existing number + 1."""
+        highest = 0
+        for name in self.names():
+            head, _, num = name.rpartition(" ")
+            if head == prefix and num.isdigit():
+                highest = max(highest, int(num))
+        name = f"{prefix} {highest + 1}"
+        self.save(name, [])
+        return name
+
     def remove(self, name: str, rel: str) -> bool:
         """Remove a track. False if it wasn't in the playlist."""
         tracks = self.load(name)

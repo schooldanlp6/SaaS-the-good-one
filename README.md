@@ -29,7 +29,7 @@ sudo apt install python3-mpv python3-pytest
 python3 main.py --config config/dev.toml    # set media_root in it first
 ```
 
-Keys: `space` play/pause · `s` stop · `n`/`p` next/prev · `]`/`[` folder up/down · `+`/`-` volume · `a` save/remove song in playlist · `l` next playlist · `f` like · `v` folders ⇄ playlists · `*` next medium · `q` quit.
+Keys: `space` play/pause · `s` stop · `n`/`p` next/prev · `]`/`[` folder up/down · `+`/`-` volume · `a` save/remove song in playlist · `l` next playlist · `c` new playlist · `f` like · `v` folders ⇄ playlists · `*` next medium · `U` update · `q` quit.
 Rename the music folder while it plays to simulate yanking the stick. To test `*`, set `layout = "multi"` and point `media_root` at a folder whose subfolders act as sticks.
 No libmpv? Set `backend = "dummy"` (every track "plays" silently for 10 s).
 
@@ -44,7 +44,9 @@ Everything is done as root (`su -`):
 | **Install** | unpack, `./install.sh` |
 | **Upgrade** | unpack the new version, run *its* `./install.sh`. It stops the service cleanly (that's when the state is saved), replaces the program, keeps `/etc/saas/config.toml`, and restarts the service if it was running. |
 | **Patches** | drop `*.patch` files into `patches/` before running `./install.sh`. They're applied in name order to a staging copy. A patch that's already contained is skipped, one that doesn't apply exactly stops the install. Your unpacked folder is never modified. |
-| **Uninstall** | `/opt/saas/uninstall.sh` keeps config and state; `--purge` removes everything incl. the `saas` user. Sticks and their playlists are never touched. |
+| **Offline** | `./install.sh --offline` skips apt (deps already installed / no network). |
+| **OTA** | see below: `DLP6/Update/saas.pub` on a stick, press update twice. |
+| **Uninstall** | `saas-uninstall` keeps config and state; `--purge` removes everything incl. the `saas` user. Sticks and their playlists are never touched. |
 
 After a fresh install:
 1. `python3 /opt/saas/main.py --list-devices`, then put your DAC's name (the `alsa/plughw:CARD=…` one) into `[audio] device`.
@@ -54,19 +56,31 @@ Works on any Debian-based 32-bit system (stock Debian or Raspberry Pi OS Lite; t
 
 **GPIO** goes straight through the kernel's `/dev/gpiochip*` interface (`saas/hw/gpiochip.py`, standard library only), so it needs no gpiozero, no `/dev/mem`, and no root. The installer adds a `gpio` group plus a udev rule for it. Check with `ls -l /dev/gpiochip*`, which should show group `gpio`. If the chip can't be opened, SaaS logs `GPIO disabled: …` and keeps playing without buttons/LEDs.
 
+## OTA updates from a stick
+
+1. Put a release package on any stick as `DLP6/Update/saas.pub`. It can be a zip or a tar.gz; every release comes with a ready-made `saas.pub`.
+2. Press **update** (`U` / GPIO `update`): line 2 says `Update 0.6.2 found - U to install` (or `Up to date`, `No update on the stick`).
+3. Press it again within 20 s: `Updating to 0.6.2...`. The package is extracted safely (no paths outside, no links, size limit), its `patches/` are applied, then the **new** code validates your config. Only if all of that passes are the program files swapped (old ones → `/opt/saas/.previous`). SaaS then restarts itself (exec, so it works under any init system or when started by hand), resumes the song and shows `Updated to 0.6.2`.
+
+OTA updates the program in `/opt/saas`, which belongs to the `saas` user. System parts (udev rules, init scripts, packages) need root. If the package changes those, line 2 says `run install.sh for system parts`, and you run `/opt/saas/package/install.sh --offline` as root. Undo an OTA update with `saas-rollback` (as root), then restart SaaS.
+
+**Building a `saas.pub` yourself:** from the project folder run `./make-pub.sh` (writes `saas.pub` next to it), `./make-pub.sh -o /some/file.pub`, or `./make-pub.sh --stick /media/usb/STICK` to put it straight onto a mounted stick as `DLP6/Update/saas.pub`. Bash + tar only. It checks VERSION and the Python syntax first.
+
+`./install.sh --offline` skips apt completely (dependencies already installed, no network) and only checks that python3 and python-mpv are there.
+
 ## Media, playlists, status
 
 - **Sticks:** each one is mounted at `/media/usb/<label>` (read-write with `sync`, files owned by `saas`). Every stick is its own medium with its own resume point, and `*` / the `source_next` button cycles through them. If you were playing, it keeps playing on the next stick where that stick left off. Pull the active stick and it falls back to another one, stopped. At boot it prefers the stick that was active last time.
-- **Playlists:** stored on the stick as `DLP6/Playlists/<name>.toml` (paths relative to the stick root). `a` / `playlist_add` is one click: it saves the current song to the active playlist, or removes it if it's already in there (line 2 says "Saved to …" / "Removed from …"). `l` / `playlist_next` cycles which playlist that is. Missing files are skipped.
+- **Playlists:** stored on the stick as `DLP6/Playlists/<name>.toml` (paths relative to the stick root). `a` / `playlist_add` is one click: it saves the current song to the active playlist, or removes it if it's already in there (line 2 says "Saved to …" / "Removed from …"). `l` / `playlist_next` cycles which playlist that is. `c` / `playlist_new` creates the next numbered playlist ("Playlist 1", "Playlist 2", …, highest number + 1) on the active stick and makes it the save target right away. Names can't be typed with buttons: rename or edit playlists on a PC with pctool. Missing files are skipped. An empty playlist can be a save target but only shows up in the playlists view once it has songs.
 - **Folders ⇄ Playlists:** folder up/down only moves within the current view. `v` / `view_toggle` switches between the folders and the playlists (line 2 says "Folders: Rock" / "Playlists: Favorites", line 1 says "Folder 2/20" or "Playlist 1/3"). Each view remembers its place: you come back to the same folder or playlist, song and second, and play/pause stays as it was. When a playlist ends it continues with the next playlist, not with the folders.
 - **Liked Songs:** `f` / `like` toggles the song in its own playlist (`[playlists] liked`). It isn't part of the `l` cycle, and the display shows a like icon while a liked song plays.
 - **pctool** (on your PC): `python3 pctool.py [stick path]` is a small terminal browser for building playlists on the stick: Tab switches panes, `a` adds a song or a whole folder, `d` removes, `J`/`K` reorders, `[`/`]` switches playlist, `n` creates a new one.
-- **Display / dashboard:** `/opt/saas/saas-now.sh` (pure bash) prints two lines:
+- **Display / dashboard:** `saas-now` (`/usr/local/bin/saas-now`, pure bash, owned by root) prints two lines:
   ```
   Playing: Beta, Band B - Album - (4:56), Track 3/12 Folder 2/20
   Save to: Favorites  <3
   ```
-  Line 2 shows the last action for 5 s, otherwise where "save" goes and whether the song is already in there; the like icon sits at the end. `SAAS_WIDTH=20` cuts both lines for a 2×20 VFD (icon stays bottom-right), `SAAS_LIKE_ICON` sets the icon. Source it (`. /opt/saas/saas-now.sh; saas_lines`) to get `$SAAS_LINE1`, `$SAAS_LINE2` and every `$SAAS_*` value in your own script. It never `source`s or `eval`s the status file, and numbers are checked to be digits, so a root dashboard can't be tricked into running anything.
+  Line 2 shows the last action for 5 s, otherwise where "save" goes and whether the song is already in there; the like icon sits at the end. `SAAS_WIDTH=20` cuts both lines for a 2×20 VFD (icon stays bottom-right), `SAAS_LIKE_ICON` sets the icon. Source it (`. /usr/local/bin/saas-now; saas_lines`) to get `$SAAS_LINE1`, `$SAAS_LINE2` and every `$SAAS_*` value in your own script. It never `source`s or `eval`s the status file, and numbers are checked to be digits, so a root dashboard can't be tricked into running anything.
 - **Status files:** `/dev/shm/saas/now.json`, `now.txt` and `now.vars` (KEY=value for shell scripts). `/dev/shm` is a tmpfs on every Linux, so the SD card is never touched, and SaaS creates the folder itself, whether started by systemd, OpenRC, sysvinit or by hand. It only writes into it if the folder belongs to the user SaaS runs as. They're updated on every change and every second while playing. They hold track/tags/position, folder, medium, volume, the active playlist and the last notice ("added X to Favorites", "medium: B_STICK", …). For example `watch -n1 cat /dev/shm/saas/now.txt`.
 - **State on the SD card:** `/var/lib/saas/state.json` holds folder, track, title and seconds per stick. It's written **only on a clean exit** (service stop / shutdown), so a hard power cut loses the position since the last clean stop.
 
@@ -86,6 +100,8 @@ Works on any Debian-based 32-bit system (stock Debian or Raspberry Pi OS Lite; t
 | next medium (`*`) | 12 | 32 | button → GND |
 | like (`f`) | 19 | 35 | button → GND |
 | folders ⇄ playlists (`v`) | 20 | 38 | button → GND |
+| update (`U`) | 21 | 40 | button → GND |
+| new playlist (`c`) | 18 | 12 | button → GND |
 | LED playing | 6 | 31 | 330 Ω–1 kΩ → LED → GND |
 | LED media | 13 | 33 | 330 Ω–1 kΩ → LED → GND |
 

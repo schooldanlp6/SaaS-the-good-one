@@ -8,10 +8,10 @@
 # for a few seconds, otherwise where the playlist button saves to (and whether
 # the song is already in there). The like icon sits at the end of line 2.
 #
-# Use:     saas-now.sh               -> prints the 2 lines
-#          mapfile -t L < <(saas-now.sh); echo "${L[0]}" "${L[1]}"
+# Use:     saas-now                  -> prints the 2 lines (installed as /usr/local/bin/saas-now)
+#          mapfile -t L < <(saas-now); echo "${L[0]}" "${L[1]}"
 #          source it to get the saas_lines function + SAAS_* variables:
-#            . /opt/saas/saas-now.sh; saas_lines; echo "$SAAS_LINE1"
+#            . /usr/local/bin/saas-now; saas_lines; echo "$SAAS_LINE1"
 # Env:     SAAS_VARS            (default /dev/shm/saas/now.vars)
 #          SAAS_NOTICE_SECONDS  how long an action stays on line 2 (default 5)
 #          SAAS_WIDTH           cut both lines to N chars (e.g. 20 for a VFD; 0 = no cut)

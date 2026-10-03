@@ -59,6 +59,7 @@ class Player:
         playlist_dir: Optional[str] = None,   # e.g. "DLP6/Playlists"; None = no playlists
         default_playlist: str = "Favorites",
         liked_playlist: str = "Liked Songs",
+        updater: Any = None,                 # saas.core.updater.Updater, None = OTA off
     ) -> None:
         self.bus = bus
         self.backend = backend
@@ -73,6 +74,7 @@ class Player:
         self.playlist_dir = playlist_dir
         self.default_playlist = default_playlist
         self.liked_playlist = liked_playlist
+        self.updater = updater
 
         self.media: Dict[str, Library] = {}      # root path -> library, in arrival order
         self.active_root: Optional[str] = None
@@ -98,6 +100,10 @@ class Player:
         backend.set_end_callback(lambda reason: bus.emit(Event.TRACK_END, reason))
         backend.set_info_callback(lambda info: bus.emit(Event.TRACK_INFO, info))
         backend.set_volume(self.state.volume)
+        if updater is not None:
+            msg = updater.consume_marker()   # "Updated to X" after an OTA restart
+            if msg:
+                self._notice(msg)
 
         self._handlers: Dict[Event, Callable[[Any], None]] = {
             Event.PLAY_PAUSE: self._play_pause,
@@ -115,8 +121,10 @@ class Player:
             Event.TRACK_INFO: self._track_info,
             Event.PLAYLIST_ADD: self._playlist_add,
             Event.PLAYLIST_NEXT: self._playlist_next,
+            Event.PLAYLIST_NEW: self._playlist_new,
             Event.LIKE: self._like,
             Event.VIEW_TOGGLE: self._view_toggle,
+            Event.UPDATE: self._update,
         }
 
     # public API used by main.py -------------------------------------------
@@ -528,6 +536,20 @@ class Player:
         self._refresh_labels()
         return added
 
+    def _update(self, _: Any) -> None:
+        if self.updater is None:
+            self._notice("Updates are disabled")
+            return
+
+        def announce(msg: str) -> None:  # show "Updating..." before the slow part
+            self._notice(msg)
+            self.publish()
+
+        msg, restart = self.updater.press(list(self.media), announce)
+        self._notice(msg)
+        if restart:
+            self.bus.emit(Event.RESTART)
+
     def _view_toggle(self, _: Any) -> None:
         """Jump between the folders and the playlists, each at its last place."""
         s, lib = self.state, self.library
@@ -569,6 +591,22 @@ class Player:
         added = self._toggle_in(name)
         if added is not None:
             self._notice(f"Saved to {name}" if added else f"Removed from {name}")
+
+    def _playlist_new(self, _: Any) -> None:
+        if not self.playlist_dir:
+            log.warning("playlist new: playlists are disabled")
+            return
+        if not self._has_media:
+            self._notice("No stick for playlists")
+            return
+        try:
+            name = self.library.playlists.create_numbered()
+        except OSError as exc:
+            self._notice(f"cannot create playlist: {exc.strerror}")
+            return
+        self.state.active_playlist = name   # "save" goes there from now on
+        self._refresh_playlist_flags()
+        self._notice(f"Created {name}")
 
     def _like(self, _: Any) -> None:
         added = self._toggle_in(self.liked_playlist)

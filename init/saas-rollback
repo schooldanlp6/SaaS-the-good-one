@@ -1,0 +1,17 @@
+#!/bin/sh
+# saas-rollback - undo the last OTA update (swap /opt/saas/.previous back in).
+# Run as root, then restart SaaS. Running it twice re-applies the update.
+set -eu
+APP=/opt/saas
+PREV=$APP/.previous
+[ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
+[ -d "$PREV" ] || { echo "nothing to roll back ($PREV is missing)" >&2; exit 1; }
+TMP=$(mktemp -d "$APP/.rollback-XXXXXX")
+for item in saas main.py pctool.py VERSION; do
+	if [ -e "$APP/$item" ]; then mv "$APP/$item" "$TMP/$item"; fi
+	if [ -e "$PREV/$item" ]; then mv "$PREV/$item" "$APP/$item"; fi
+done
+rm -rf "$PREV"
+mv "$TMP" "$PREV"
+chown -R saas:saas "$APP" 2>/dev/null || true
+echo "rolled back to $(cat "$APP/VERSION" 2>/dev/null || echo '?') - now restart SaaS"

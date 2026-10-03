@@ -29,6 +29,12 @@ dir     = "DLP6/Playlists"
 default = "Favorites"
 liked   = "Liked Songs"   # the like button's playlist
 
+# OTA updates: put a release package (zip or tar.gz) on a stick as
+# DLP6/Update/saas.pub, press update (U) once to look, again to install.
+[update]
+enabled = true
+file    = "DLP6/Update/saas.pub"
+
 [state]
 # Resume point per stick (folder, track, title, seconds). Written ONLY on a
 # clean exit (service stop / shutdown) - no SD card writes while playing.
@@ -64,9 +70,11 @@ vol_up      = { pin = 25, repeat = true }   # hold to keep turning up
 vol_down    = { pin = 5,  repeat = true }
 playlist_add  = 16   # save/remove the current song in the active playlist (keyboard: a)
 playlist_next = 26   # cycle which playlist "save" goes to (keyboard: l)
+playlist_new  = 18   # create "Playlist N" and save into it from now on (keyboard: c)
 source_next   = 12   # cycle through the plugged-in sticks (keyboard: *)
 like          = 19   # toggle the song in "Liked Songs" (keyboard: f)
 view_toggle   = 20   # folder up/down: folders <-> playlists (keyboard: v)
+update        = 21   # OTA from the stick: 1st press search, 2nd press install (keyboard: U)
 # or both on one button:  playlist_add = { pin = 16, hold = "playlist_next" }
 
 # LEDs: GPIO -> 330R..1k resistor -> LED -> GND.

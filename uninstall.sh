@@ -1,5 +1,5 @@
 #!/bin/sh
-# SaaS uninstaller. Run as root:  /opt/saas/uninstall.sh [--purge]
+# SaaS uninstaller. Run as root:  saas-uninstall [--purge]
 #   default:  removes program, service, udev rules. Keeps config + state.
 #   --purge:  also removes /etc/saas, /var/lib/saas, the log and the saas user.
 # Your sticks and the playlists on them are never touched.
@@ -31,6 +31,7 @@ fi
 
 say "removing udev rules + auto-mount helper"
 rm -f /etc/udev/rules.d/99-saas-usb.rules /etc/udev/rules.d/60-saas-gpio.rules /usr/local/sbin/saas-automount
+rm -f /usr/local/bin/saas-now /usr/local/sbin/saas-rollback /usr/local/sbin/saas-uninstall
 udevadm control --reload 2>/dev/null
 
 say "removing /opt/saas and the status files"

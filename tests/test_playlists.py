@@ -347,3 +347,26 @@ def test_status_output_creates_its_dir_and_survives_refusal(tmp_path):
     bad = StatusOutput(str(tmp_path / "bad"), lambda: None, interval=60)
     bad.update(PlayerState())                         # logs a warning, doesn't raise
     assert not (tmp_path / "now.json").exists()
+
+
+def test_playlist_new_numbers_sequentially(backend, stick):
+    st = PlaylistStore(stick, PL)
+    st.save("Road", ["B/x.mp3"])
+    p = make_player(backend)
+    p.handle(Event.PLAYLIST_NEW)
+    assert p.state.notice == "No stick for playlists"
+    p.handle(Event.MEDIA_ADDED, stick)
+    p.handle(Event.PLAYLIST_NEW)
+    assert p.state.notice == "Created Playlist 1" and p.state.active_playlist == "Playlist 1"
+    p.handle(Event.PLAY_PAUSE)
+    p.handle(Event.PLAYLIST_ADD)                       # saves straight into the new one
+    assert st.load("Playlist 1") == ["A/1.mp3"] and p.state.notice == "Saved to Playlist 1"
+    p.handle(Event.PLAYLIST_NEW)
+    assert p.state.active_playlist == "Playlist 2" and not p.state.in_active_playlist
+    os.remove(st.path("Playlist 1"))                   # numbers aren't reused below the highest
+    p.handle(Event.PLAYLIST_NEW)
+    assert p.state.active_playlist == "Playlist 3"
+    names = st.names()
+    assert names == ["Playlist 2", "Playlist 3", "Road"]
+    p.handle(Event.PLAYLIST_NEXT)                      # empty new playlists are still save targets
+    assert p.state.active_playlist in names + ["Favorites"]

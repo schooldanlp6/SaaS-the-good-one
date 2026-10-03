@@ -11,6 +11,9 @@ media_root    = "~/Music"   # CHANGE to a folder with a few album folders
 end_of_folder = "continue"
 autoplay      = false
 
+[update]
+enabled = false   # don't let OTA overwrite your working copy
+
 [state]
 file = ".saas-state.json"
 

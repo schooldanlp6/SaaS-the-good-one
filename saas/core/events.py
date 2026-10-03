@@ -24,8 +24,10 @@ class Event(enum.Enum):
     PLAYLIST_ADD = "playlist_add"    # toggle the current track in the active playlist
     LIKE = "like"                    # toggle the current track in "Liked Songs"
     PLAYLIST_NEXT = "playlist_next"  # cycle the active playlist
+    PLAYLIST_NEW = "playlist_new"    # create "Playlist N" (next number) and make it active
     SOURCE_NEXT = "source_next"      # cycle through the media present (sticks, ...)
     VIEW_TOGGLE = "view_toggle"      # switch folder navigation: folders <-> playlists
+    UPDATE = "update"                # 1st press: look for DLP6/Update/saas.pub, 2nd: install
 
     # Internal events.
     TRACK_END = "track_end"          # data: "eof" | "error"
@@ -33,6 +35,7 @@ class Event(enum.Enum):
     MEDIA_REMOVED = "media_removed"  # data: media root path
     TRACK_INFO = "track_info"        # data: {"title", "artist", "album", "duration"}
     QUIT = "quit"
+    RESTART = "restart"              # main loop: clean shutdown, then exec ourselves again
 
 
 USER_EVENTS = {
@@ -41,6 +44,7 @@ USER_EVENTS = {
         Event.PLAY_PAUSE, Event.STOP, Event.NEXT, Event.PREV,
         Event.FOLDER_UP, Event.FOLDER_DOWN, Event.VOL_UP, Event.VOL_DOWN,
         Event.PLAYLIST_ADD, Event.PLAYLIST_NEXT, Event.SOURCE_NEXT, Event.LIKE, Event.VIEW_TOGGLE,
+        Event.UPDATE, Event.PLAYLIST_NEW,
     )
 }
 
