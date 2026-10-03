@@ -1,0 +1,67 @@
+#!/bin/sh
+# Called by udev (see 99-saas-usb.rules). Every stick gets its own mount point:
+#   /media/usb/<label>   (or /media/usb/<sdXN> if it has no label)
+# so SaaS can cycle between several sticks.
+#
+# Mounted read-write (playlists live on the stick) but with "sync", so every
+# write goes to the stick immediately and the window in which pulling it out
+# could corrupt something stays tiny. FAT/exFAT/NTFS files are owned by the
+# saas user so it can write playlists.
+#
+# On systemd, udev runs RUN+= programs in a private mount namespace, so a
+# plain `mount` would be invisible to everyone else - systemd-mount asks
+# systemd to do it instead. Without systemd (eudev / mdev), plain mount works.
+
+BASE=/media/usb
+ACTION="$1"
+DEV="$2"
+
+log() { logger -t saas-automount "$*" 2>/dev/null || true; }
+# mount point(s) of a device below $BASE
+mount_of() { awk -v d="$1" -v b="$BASE/" '$1 == d && index($2, b) == 1 { print $2 }' /proc/mounts; }
+
+case "$ACTION" in
+add)
+	[ -n "$(mount_of "$DEV")" ] && exit 0      # already mounted
+	KNAME=$(basename "$DEV")
+	NAME=$(printf '%s' "${ID_FS_LABEL:-$KNAME}" | tr -c 'A-Za-z0-9._-' '_')
+	[ -n "$NAME" ] || NAME=$KNAME
+	MNT="$BASE/$NAME"
+	if mountpoint -q "$MNT" 2>/dev/null; then  # two sticks with the same label
+		MNT="$BASE/$NAME-$KNAME"
+	fi
+
+	OPTS="rw,sync,noatime,nosuid,nodev,noexec"
+	OWNER=""
+	if id saas >/dev/null 2>&1; then
+		OWNER=",uid=$(id -u saas),gid=$(id -g saas)"
+	fi
+	case "$ID_FS_TYPE" in
+		vfat) OPTS="$OPTS,flush,utf8$OWNER" ;;   # utf8: non-ASCII file names
+		exfat|ntfs|ntfs3) OPTS="$OPTS$OWNER" ;;
+	esac
+	mkdir -p "$MNT"
+	if [ -d /run/systemd/system ]; then
+		systemd-mount --no-block --automount=no --collect -o "$OPTS" "$DEV" "$MNT" \
+			&& log "mounting $DEV ($ID_FS_TYPE) on $MNT"
+	else
+		mount -o "$OPTS" "$DEV" "$MNT" && log "mounted $DEV ($ID_FS_TYPE) on $MNT"
+	fi
+	;;
+remove)
+	for MNT in $(mount_of "$DEV"); do
+		if [ -d /run/systemd/system ]; then
+			systemd-mount --umount "$MNT" 2>/dev/null || umount -l "$MNT"
+		else
+			umount -l "$MNT"
+		fi
+		rmdir "$MNT" 2>/dev/null
+		log "unmounted $DEV from $MNT"
+	done
+	# systemd may already have unmounted it (device gone): clean up empty dirs
+	for d in "$BASE"/*; do
+		[ -d "$d" ] && ! mountpoint -q "$d" && rmdir "$d" 2>/dev/null
+	done
+	;;
+esac
+exit 0

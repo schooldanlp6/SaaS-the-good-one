@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+# OpenRC service for SaaS (Alpine & co.)
+
+name="saas"
+description="SaaS - ScriptAsASystem music player"
+command="@PYTHON@"
+command_args="@PREFIX@/main.py --config /etc/saas/config.toml"
+command_user="saas:saas"
+command_background=true
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/saas.log"
+error_log="/var/log/saas.log"
+
+depend() {
+	need localmount
+	after alsasound udev
+}

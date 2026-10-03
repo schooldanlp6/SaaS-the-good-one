@@ -1,0 +1,4 @@
+# Let the "gpio" group use the GPIO character devices (/dev/gpiochipN), so
+# SaaS can drive buttons/LEDs without root. Raspberry Pi OS already ships a
+# similar rule; stock Debian doesn't (there it's root:root 0600).
+SUBSYSTEM=="gpio", KERNEL=="gpiochip*", GROUP="gpio", MODE="0660"

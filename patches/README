@@ -1,0 +1,6 @@
+Drop *.patch files here (unified diff, -p1, made from the project root).
+install.sh applies them in name order onto a staging copy before installing:
+  - already contained in the code -> skipped
+  - applies cleanly               -> applied
+  - neither                       -> install stops with an error
+The unpacked folder itself is never modified. Name them 0001-..., 0002-...

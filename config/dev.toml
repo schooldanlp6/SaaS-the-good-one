@@ -1,0 +1,40 @@
+# Laptop / dev config: keyboard in, console out, a local music folder.
+#   python3 main.py --config config/dev.toml
+
+[audio]
+backend = "mpv"        # "dummy" = silent fake playback, no libmpv needed
+device  = "auto"       # laptop: let mpv pick (PipeWire/Pulse/ALSA)
+volume  = 60
+
+[library]
+media_root    = "~/Music"   # CHANGE to a folder with a few album folders
+end_of_folder = "continue"
+autoplay      = false
+
+[state]
+file = ".saas-state.json"
+
+[sources.usb]
+layout             = "single"   # "multi" = every subfolder of media_root is a "stick" (test * cycling)
+require_mountpoint = false   # a plain folder counts as "media"; rename it to simulate yanking the stick
+poll_interval      = 1
+
+[inputs.keyboard]
+enabled = true
+
+[outputs.console]
+enabled = true
+
+[outputs.status]
+dir = "/tmp/saas"      # /run needs root on a laptop
+
+# Exercise the GPIO/LED code without hardware:
+# [gpio]
+# chip = "mock"
+# [inputs.gpio]
+# enabled = true
+# [inputs.gpio.buttons]
+# play_pause = 17
+# [outputs.leds]
+# enabled = true
+# playing = 6

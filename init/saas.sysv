@@ -1,0 +1,39 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          saas
+# Required-Start:    $local_fs
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: SaaS - ScriptAsASystem music player
+### END INIT INFO
+
+DAEMON="@PYTHON@"
+ARGS="@PREFIX@/main.py --config /etc/saas/config.toml"
+PIDFILE=/run/saas.pid
+LOG=/var/log/saas.log
+RUNAS=saas
+
+start() {
+	echo "Starting saas"
+	start-stop-daemon --start --background --make-pidfile --pidfile "$PIDFILE" \
+		--chuid "$RUNAS" --startas /bin/sh -- -c "exec $DAEMON $ARGS >>$LOG 2>&1"
+}
+
+stop() {
+	echo "Stopping saas"
+	start-stop-daemon --stop --pidfile "$PIDFILE" --retry TERM/10/KILL/2
+	rm -f "$PIDFILE"
+}
+
+case "$1" in
+	start) start ;;
+	stop) stop ;;
+	restart) stop; sleep 1; start ;;
+	status)
+		if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+			echo "saas is running"; exit 0
+		fi
+		echo "saas is not running"; exit 3 ;;
+	*) echo "usage: $0 {start|stop|restart|status}"; exit 1 ;;
+esac

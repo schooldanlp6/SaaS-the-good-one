@@ -1,0 +1,19 @@
+[Unit]
+Description=SaaS - ScriptAsASystem music player
+After=sound.target local-fs.target
+# Deliberately no network-online.target: the player must never wait for the network.
+
+[Service]
+Type=simple
+User=saas
+Group=saas
+ExecStart=@PYTHON@ @PREFIX@/main.py --config /etc/saas/config.toml
+Restart=on-failure
+RestartSec=2
+# exit code 2 = config error; restarting won't fix that
+RestartPreventExitStatus=2
+Nice=-5
+StateDirectory=saas
+
+[Install]
+WantedBy=multi-user.target

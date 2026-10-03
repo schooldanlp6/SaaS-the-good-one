@@ -1,0 +1,4 @@
+# Mount the first USB storage filesystem on /media/usb for SaaS (rw + sync).
+# sd* only: the Pi's own SD card is mmcblk*, CD drives are sr*.
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z]*", ENV{ID_FS_USAGE}=="filesystem", RUN+="/usr/local/sbin/saas-automount add $devnode"
+ACTION=="remove", SUBSYSTEM=="block", KERNEL=="sd[a-z]*", RUN+="/usr/local/sbin/saas-automount remove $devnode"

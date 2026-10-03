@@ -1,0 +1,88 @@
+# Raspberry Pi config. The installer copies this to /etc/saas/config.toml.
+# Check with:  python3 /opt/saas/main.py --config /etc/saas/config.toml --check
+
+[audio]
+backend = "mpv"
+# REQUIRED: your DAC (the Scarlett). Find it with:
+#   python3 /opt/saas/main.py --list-devices
+# and paste its name here, preferably the "alsa/plughw:CARD=...,DEV=0" entry.
+device      = "CHANGE_ME"
+volume      = 70
+volume_step = 5
+volume_max  = 100
+
+# Anything here goes straight to mpv as an option:
+[audio.mpv_options]
+# replaygain = "album"
+# audio_buffer = 0.5          # bigger buffer if the shared USB bus causes dropouts
+
+[library]
+media_root    = "/media/usb"   # every stick is mounted at /media/usb/<label>
+end_of_folder = "continue"     # continue | repeat | stop
+autoplay      = true           # power on -> resumes playing
+
+# Playlists live on the stick: <stick>/DLP6/Playlists/<name>.toml
+# (edit them on a PC with pctool.py). The stick is mounted read-write for this.
+[playlists]
+enabled = true
+dir     = "DLP6/Playlists"
+default = "Favorites"
+liked   = "Liked Songs"   # the like button's playlist
+
+[state]
+# Resume point per stick (folder, track, title, seconds). Written ONLY on a
+# clean exit (service stop / shutdown) - no SD card writes while playing.
+file = "/var/lib/saas/state.json"
+
+[sources.usb]
+enabled            = true
+layout             = "multi"   # each mount point in media_root = one medium (* cycles)
+require_mountpoint = true
+poll_interval      = 2
+
+[inputs.keyboard]
+enabled = false
+
+# GPIO goes straight through /dev/gpiochip* (no root, no extra packages).
+[gpio]
+chip = "auto"       # finds the Pi's chip; or e.g. "/dev/gpiochip0"
+
+# Buttons: GPIO -> button -> GND. BCM numbers. This is the wiring from the
+# README; change the numbers if you wire it differently.
+# Free of I2C (2,3), SPI (7-11) and UART (14,15) so an OLED can be added later.
+[inputs.gpio]
+enabled   = true
+bounce_ms = 30
+
+[inputs.gpio.buttons]
+play_pause  = { pin = 17, hold = "stop" }   # short: play/pause, hold 1 s: stop
+next        = 27
+prev        = 22
+folder_up   = 23
+folder_down = 24
+vol_up      = { pin = 25, repeat = true }   # hold to keep turning up
+vol_down    = { pin = 5,  repeat = true }
+playlist_add  = 16   # save/remove the current song in the active playlist (keyboard: a)
+playlist_next = 26   # cycle which playlist "save" goes to (keyboard: l)
+source_next   = 12   # cycle through the plugged-in sticks (keyboard: *)
+like          = 19   # toggle the song in "Liked Songs" (keyboard: f)
+view_toggle   = 20   # folder up/down: folders <-> playlists (keyboard: v)
+# or both on one button:  playlist_add = { pin = 16, hold = "playlist_next" }
+
+# LEDs: GPIO -> 330R..1k resistor -> LED -> GND.
+[outputs.leds]
+enabled     = true
+playing     = 6     # on = playing, blinking = paused
+media       = 13    # on = stick mounted; blinks the folder number on folder change
+folder_bits = []    # e.g. [19, 26, 21] = folder number in binary instead of blinking
+
+# Now playing + status for dashboards: now.json / now.txt / now.vars.
+# /dev/shm is a tmpfs on every Linux (no SD card writes) and SaaS can create its
+# folder there itself - works with any init system and when started by hand.
+[outputs.status]
+enabled  = true
+dir      = "/dev/shm/saas"
+interval = 1.0
+
+[outputs.console]
+enabled = true      # status lines in the journal / log
