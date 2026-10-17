@@ -28,7 +28,16 @@ DEFAULT_KEYS: Dict[str, str] = {
     "v": "view_toggle",
     "U": "update",
     "*": "source_next",
+    "?": "help",
     "q": "quit",
+}
+
+_LABELS = {
+    "play_pause": "play/pause", "stop": "stop", "next": "next", "prev": "prev",
+    "folder_up": "folder +", "folder_down": "folder -", "vol_up": "vol +", "vol_down": "vol -",
+    "playlist_add": "save/remove", "playlist_next": "next playlist", "playlist_new": "new playlist",
+    "like": "like", "view_toggle": "folders/playlists", "source_next": "next stick",
+    "update": "update", "help": "this help", "quit": "quit",
 }
 
 
@@ -51,8 +60,21 @@ class KeyboardInput(Input):
         self._saved = termios.tcgetattr(self._fd)
         tty.setcbreak(self._fd)  # unbuffered keys, output processing stays normal
         threading.Thread(target=self._run, name="keyboard", daemon=True).start()
-        help_line = "  ".join(f"[{'space' if k == ' ' else k}] {v}" for k, v in self.keys.items())
-        print(f"keys: {help_line}", flush=True)
+        self.print_help()
+
+    def help_text(self) -> str:
+        items = [f"{'space' if k == ' ' else k}: {_LABELS.get(v, v)}" for k, v in self.keys.items()]
+        lines, line = [], "keys:"
+        for item in items:  # wrap at ~78 columns
+            if len(line) + 3 + len(item) > 78:
+                lines.append(line)
+                line = "     "
+            line += "   " + item
+        lines.append(line)
+        return "\n".join(lines)
+
+    def print_help(self) -> None:
+        print(self.help_text(), flush=True)
 
     def _run(self) -> None:
         while True:
@@ -63,7 +85,9 @@ class KeyboardInput(Input):
             if not data:
                 return
             name = self.keys.get(data.decode("utf-8", "ignore"))
-            if name == "quit":
+            if name == "help":
+                self.print_help()
+            elif name == "quit":
                 self.bus.emit(Event.QUIT)
             elif name:
                 self.bus.emit(parse_event(name))

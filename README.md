@@ -29,7 +29,7 @@ sudo apt install python3-mpv python3-pytest
 python3 main.py --config config/dev.toml    # set media_root in it first
 ```
 
-Keys: `space` play/pause · `s` stop · `n`/`p` next/prev · `]`/`[` folder up/down · `+`/`-` volume · `a` save/remove song in playlist · `l` next playlist · `c` new playlist · `f` like · `v` folders ⇄ playlists · `*` next medium · `U` update · `q` quit.
+Keys: `space` play/pause · `s` stop · `n`/`p` next/prev · `]`/`[` folder up/down · `+`/`-` volume · `a` save/remove song in playlist · `l` next playlist · `c` new playlist · `f` like · `v` folders ⇄ playlists · `*` next medium · `U` update · `?` show these keys again · `q` quit.
 Rename the music folder while it plays to simulate yanking the stick. To test `*`, set `layout = "multi"` and point `media_root` at a folder whose subfolders act as sticks.
 No libmpv? Set `backend = "dummy"` (every track "plays" silently for 10 s).
 

@@ -230,7 +230,7 @@ def validate(raw: Dict[str, Any]) -> Dict[str, Any]:
     for key, name in kb["keys"].items():
         if len(key) != 1:
             errors.append(f"'inputs.keyboard.keys': key {key!r} must be a single character")
-        elif name != "quit" and name not in USER_EVENTS:
+        elif name not in ("quit", "help") and name not in USER_EVENTS:
             errors.append(f"'inputs.keyboard.keys.{key}': unknown event {name!r}")
 
     if not isinstance(cfg["gpio"]["chip"], str):
