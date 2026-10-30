@@ -81,6 +81,12 @@ class LedOutput(Output):
         self._folder: Optional[int] = None
 
     def update(self, s: PlayerState) -> None:
+        if s.standby:  # everything dark; forget what was shown so waking redraws it
+            for led in [self.playing, self.media, *self.bits]:
+                if led is not None:
+                    led.set(False)
+            self._play_mode = self._has_media = self._folder = None
+            return
         mode = "on" if s.status == PLAYING else "blink" if s.status == PAUSED else "off"
         if self.playing and mode != self._play_mode:
             if mode == "blink":
@@ -94,16 +100,18 @@ class LedOutput(Output):
         if self.media and media_changed:
             self.media.set(s.media)
 
-        folder = s.folder_index if s.media else None
+        # the number as the user sees it: position inside the current view
+        # (folders or playlists), 1-based - not the index across both
+        folder = (s.view, s.view_index) if s.media else None
         if folder != self._folder:
             self._folder = folder
             if self.bits:
-                value = 0 if folder is None else (folder + 1) % (1 << len(self.bits))
+                value = 0 if folder is None else folder[1] % (1 << len(self.bits))
                 for i, led in enumerate(self.bits):
                     led.set(bool(value >> i & 1))
             elif self.media and folder is not None:
                 # blink the folder number, then back to solid on
-                self.media.blink(self.blink_on, self.blink_off, n=folder + 1, then=True)
+                self.media.blink(self.blink_on, self.blink_off, n=max(1, folder[1]), then=True)
 
     def close(self) -> None:
         for led in [self.playing, self.media, *self.bits]:

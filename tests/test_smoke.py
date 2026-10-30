@@ -82,3 +82,14 @@ playing = 6
     out, err = proc.communicate(timeout=10)
     assert proc.returncode == 0, err
     assert "GPIO disabled" in err and "[play]" in out
+
+
+def test_poweroff_failure_restarts_instead_of_dying(tmp_path):
+    """poweroff -> state saved -> command fails -> SaaS comes back (exec) instead of leaving a dead box."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("saas_main", os.path.join(HERE, "main.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    assert m.power_off(["true"]) is True
+    assert m.power_off(["false"]) is False
+    assert m.power_off(["/nonexistent/poweroff"]) is False

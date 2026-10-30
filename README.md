@@ -1,5 +1,7 @@
 # SaaS — ScriptAsASystem
 
+Current release: **0.6.4 janky-jellyfish** (`python3 main.py --version`).
+
 A tiny headless music player core in Python. You get buttons, LEDs, a USB stick, and **folders = playlists**. Audio goes out through mpv to any ALSA device (here: a Focusrite Scarlett → Behringer mixer).
 It's built for a Raspberry Pi 1 B+, but the same code runs on a laptop with only the config swapped.
 
@@ -29,7 +31,7 @@ sudo apt install python3-mpv python3-pytest
 python3 main.py --config config/dev.toml    # set media_root in it first
 ```
 
-Keys: `space` play/pause · `s` stop · `n`/`p` next/prev · `]`/`[` folder up/down · `+`/`-` volume · `a` save/remove song in playlist · `l` next playlist · `c` new playlist · `f` like · `v` folders ⇄ playlists · `*` next medium · `U` update · `?` show these keys again · `q` quit.
+Keys: `space` play/pause · `s` stop · `n`/`p` next/prev · `]`/`[` folder up/down · `+`/`-` volume · `a` save/remove song in playlist · `l` next playlist · `c` new playlist · `f` like · `v` folders ⇄ playlists · `*` next medium · `U` update · `z` standby · arrows ←/→ prev/next, ↑/↓ volume · `?` show these keys again · `q` quit.
 Rename the music folder while it plays to simulate yanking the stick. To test `*`, set `layout = "multi"` and point `media_root` at a folder whose subfolders act as sticks.
 No libmpv? Set `backend = "dummy"` (every track "plays" silently for 10 s).
 
@@ -55,6 +57,22 @@ After a fresh install:
 Works on any Debian-based 32-bit system (stock Debian or Raspberry Pi OS Lite; the Pi 1 is ARMv6, so 64-bit images don't run). Kernel ≥ 5.10 for GPIO. The service never waits for the network.
 
 **GPIO** goes straight through the kernel's `/dev/gpiochip*` interface (`saas/hw/gpiochip.py`, standard library only), so it needs no gpiozero, no `/dev/mem`, and no root. The installer adds a `gpio` group plus a udev rule for it. Check with `ls -l /dev/gpiochip*`, which should show group `gpio`. If the chip can't be opened, SaaS logs `GPIO disabled: …` and keeps playing without buttons/LEDs.
+
+## Network servers (Jellyfin, Subsonic, DLNA)
+
+Every server in `[[network]]` (examples in `config/pi.toml`) is one more medium for `*`, next to the sticks. Its folders are albums ("Artist - Album"), its tracks are streamed by mpv. The album list loads in a background thread, so a slow server never freezes the buttons. A server that stops answering drops out like a pulled stick (checked every `poll` seconds, 60 by default) and comes back by itself. Resume works per server.
+
+- **Jellyfin:** `url`, `api_key` (Dashboard → API Keys), `user` (needed when there is more than one). Streams the original files, so the Pi decodes them like files from a stick.
+- **Subsonic API** (Navidrome, Airsonic, Gonic, …): `url`, `user`, `password`; token auth by default, `auth = "password"` for servers without it.
+- **DLNA/UPnP:** `location` = the server's description URL, or leave it empty to find servers on the LAN (`server` picks one by name). Set `start` to one view such as `"Music/Folders"`: DLNA servers list the same songs under several views.
+- Playlists, save and like only work on sticks; on a server line 2 says so.
+- The config now can hold passwords, so `install.sh` makes it readable for root and `saas` only. Credentials in stream URLs are blanked in the log.
+
+## Standby and power off
+
+- `standby` (`z`, or a short press on GPIO3) stops playback, releases the audio device and darkens the LEDs; line 1 says `Standby`. **Any** button wakes it, and that press only wakes (no surprise skip). If it was playing, it continues at the same second.
+- `poweroff` (hold GPIO3 for 3 s; no default key) saves the state and shuts the system down. After that, GPIO3 to GND boots the Pi again (Pi firmware feature), so one button is on/standby/off. GPIO3 is I2C SDA: keep I2C off while using it.
+- Power off needs the right to shut down: as root it runs `poweroff`; as the `saas` user under systemd, `install.sh` adds a polkit rule for exactly that. If it fails, SaaS restarts itself instead of leaving a silent box. `[power] command` overrides the command.
 
 ## OTA updates from a stick
 
@@ -102,6 +120,7 @@ OTA updates the program in `/opt/saas`, which belongs to the `saas` user. System
 | folders ⇄ playlists (`v`) | 20 | 38 | button → GND |
 | update (`U`) | 21 | 40 | button → GND |
 | new playlist (`c`) | 18 | 12 | button → GND |
+| standby (`z`), hold 3 s = power off | 3 | 5 | button → GND (also wakes the Pi after power off) |
 | LED playing | 6 | 31 | 330 Ω–1 kΩ → LED → GND |
 | LED media | 13 | 33 | 330 Ω–1 kΩ → LED → GND |
 
@@ -126,4 +145,4 @@ I2C (2/3), SPI (7–11) and UART (14/15) are left free for a display later. Wire
 
 ## Not yet
 
-Internet radio, audio CD (`cdda://`), and an OLED. Radio and CD would become more media for `*` to cycle through; the OLED is one more output file.
+Internet radio, audio CD (`cdda://`), an OLED, custom modules (0.6.5 singing-submarine).

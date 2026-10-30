@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 import mpv  # python-mpv; needs the system libmpv
@@ -36,8 +37,16 @@ def _end_reason(event: Any) -> Optional[int]:
         return None
 
 
+_SECRET = re.compile(r"(?i)\b(apikey|api_key|t|s|p|token)=[^&\s'\"]+")
+
+
+def redact(text: str) -> str:
+    """Stream URLs carry credentials (Jellyfin ApiKey, Subsonic token/salt) - never log them."""
+    return _SECRET.sub(lambda m: m.group(1) + "=***", text)
+
+
 def _log_handler(level: str, prefix: str, text: str) -> None:
-    log.log(_MPV_LOG.get(level, logging.DEBUG), "[%s] %s", prefix, text.rstrip())
+    log.log(_MPV_LOG.get(level, logging.DEBUG), "[%s] %s", prefix, redact(text.rstrip()))
 
 
 def _base_options() -> Dict[str, Any]:

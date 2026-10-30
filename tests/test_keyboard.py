@@ -57,3 +57,22 @@ def test_question_mark_reprints_keys(tmp_path):
     _, status = os.waitpid(pid, 0)
     assert os.waitstatus_to_exitcode(status) == 0
     assert first.count("keys:") == 1 and "keys:" in again and "?: this help" in again
+
+
+def test_arrow_keys_dont_trigger_folder_down(tmp_path):
+    """0.6.4 fix: ESC [ A used to be read byte by byte and the '[' meant folder_down."""
+    import threading
+    from saas.core.events import Event
+    r, w = os.pipe()
+    kb = KeyboardInput(Bus())
+    kb._fd = r
+    got = []
+    kb.bus.emit = lambda e, data=None: got.append(e)
+    t = threading.Thread(target=kb._run, daemon=True)
+    t.start()
+    for seq in (b"\x1b[A", b"\x1b[B", b"\x1b[C", b"\x1b[D", b"\x1bOA", b"\x1b[3~", b"\x1b[1;5C", b"["):
+        os.write(w, seq)
+        time.sleep(0.08)
+    os.close(w)
+    t.join(2)
+    assert got == [Event.VOL_UP, Event.VOL_DOWN, Event.NEXT, Event.PREV, Event.VOL_UP, Event.FOLDER_DOWN]

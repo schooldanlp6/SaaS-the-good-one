@@ -36,6 +36,8 @@ def _path_key(rel: str) -> list:
 
 
 class Library:
+    is_local = True
+
     def __init__(self, root: str, extensions: Iterable[str],
                  playlists: Optional[PlaylistStore] = None) -> None:
         self.root = os.path.abspath(root)
@@ -144,6 +146,9 @@ class Library:
         if key.startswith(PLAYLIST_PREFIX):
             return os.path.join(self.root, *track.split("/"))
         return os.path.join(self.root, key, track)
+
+    def track_tags(self, folder_index: int, track_index: int):
+        return None  # tags come from the file itself (mpv)
 
     def track_label(self, folder_index: int, track_index: int) -> str:
         return self.tracks(folder_index)[track_index].rsplit("/", 1)[-1]

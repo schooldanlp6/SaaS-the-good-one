@@ -169,7 +169,7 @@ def test_emptied_playlist_vanishes_safely(backend, stick):
 def test_add_without_media_and_readonly(backend, stick):
     p = make_player(backend)
     p.handle(Event.PLAYLIST_ADD)
-    assert p.state.notice == "nothing playing"
+    assert p.state.notice == "Nothing playing"
     p.handle(Event.MEDIA_ADDED, stick)
     p.handle(Event.PLAY_PAUSE)
     os.chmod(stick, 0o555)
@@ -177,7 +177,7 @@ def test_add_without_media_and_readonly(backend, stick):
         if os.geteuid() == 0:
             pytest.skip("root ignores permissions")
         p.handle(Event.PLAYLIST_ADD)
-        assert p.state.notice.startswith("cannot write Favorites")
+        assert p.state.notice.startswith("Cannot write Favorites")
         assert p.state.status == PLAYING
     finally:
         os.chmod(stick, 0o755)
@@ -225,7 +225,7 @@ def test_status_line_and_json():
     s = PlayerState(status="playing", media=True, folder_count=2, view_index=1, view_count=2,
                     folder_name="A", track_count=3,
                     track_name="01 x.flac", title="Song", artist="Band", album="LP", duration=125,
-                    active_playlist="Road", volume=70)
+                    active_playlist="Road", volume=70, can_save=True)
     d = build_status(s, 61.0)
     assert d["track"]["title"] == "Song" and d["folder"]["index"] == 1 and d["track"]["position"] == 61.0
     assert build_line(d) == "> Band - Song  [1:01/2:05]  LP  (pl: Road)"

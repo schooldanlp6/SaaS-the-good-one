@@ -75,7 +75,7 @@ def test_messages_before_install(app, tmp_path):
     (tmp_path / "EMPTY").mkdir()
     assert u.press([str(tmp_path / "EMPTY")]) == ("No update on the stick", False)
     old = stick_with(tmp_path, make_release(tmp_path, "0.6.1", "same"), name="OLD")
-    assert u.press([old]) == ("Up to date (0.6.1)", False)
+    assert u.press([old]) == ("Up to date (0.6.1 janky-jellyfish)", False)
 
 
 def test_two_presses_install_and_restart(app, tmp_path):
@@ -84,10 +84,10 @@ def test_two_presses_install_and_restart(app, tmp_path):
     s2 = stick_with(tmp_path, make_release(tmp_path, "0.7.0", "r2"), "tgz", name="S2")
     u = Updater(str(a), str(cfg))
     announced = []
-    assert u.press([s1, s2]) == ("Update 0.7.0 found - U to install", False)   # newest wins
+    assert u.press([s1, s2]) == ("Update 0.7.0 janky-jellyfish found - U to install", False)   # newest wins
     msg, restart = u.press([s1, s2], announced.append)
-    assert (msg, restart) == ("Updated to 0.7.0, restarting", True)
-    assert announced == ["Updating to 0.7.0..."]
+    assert (msg, restart) == ("Updated to 0.7.0 janky-jellyfish, restarting", True)
+    assert announced == ["Updating to 0.7.0 janky-jellyfish..."]
     assert (a / "VERSION").read_text().strip() == "0.7.0"
     assert (a / ".previous" / "VERSION").read_text().strip() == "0.6.1"
     assert (a / "package" / "install.sh").exists()
@@ -101,7 +101,7 @@ def test_offer_expires(app, tmp_path):
     u = Updater(str(a), str(cfg), confirm_seconds=0.2)
     u.press([s])
     time.sleep(0.3)
-    assert u.press([s])[0] == "Update 0.6.2 found - U to install"   # just offered again
+    assert u.press([s])[0] == "Update 0.6.2 janky-jellyfish found - U to install"   # just offered again
     assert (a / "VERSION").read_text().strip() == "0.6.1"
 
 
@@ -203,3 +203,11 @@ def test_make_pub_refuses_broken_code(tmp_path):
     (proj / "VERSION").write_text("banana\n")
     r = subprocess.run(["bash", str(proj / "make-pub.sh")], capture_output=True, text=True)
     assert "is not like 1.2.3" in r.stderr
+
+
+def test_codename_read_from_package(tmp_path):
+    from saas.core.updater import read_codename
+    rel = make_release(tmp_path, "0.6.9")
+    assert read_codename(str(pack(rel, tmp_path / "a.pub"))) == "janky-jellyfish"
+    (rel / "saas" / "version.py").write_text("x = 1\n")
+    assert read_codename(str(pack(rel, tmp_path / "b.pub", "tgz"))) == ""

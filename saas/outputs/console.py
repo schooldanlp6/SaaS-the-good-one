@@ -9,6 +9,8 @@ _TAGS = {"idle": "[----]", "stopped": "[stop]", "playing": "[play]", "paused": "
 
 
 def format_state(s: PlayerState) -> str:
+    if s.standby:
+        return f"[stby] standby  vol {s.volume}"
     tag = _TAGS.get(s.status, f"[{s.status}]")
     if not s.media:
         return f"{tag} no media  vol {s.volume}"

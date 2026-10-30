@@ -19,12 +19,14 @@
 
 # Only these keys are taken from the file. Numbers must be plain digits: bash
 # arithmetic would otherwise *execute* things like a[$(cmd)] hidden in a value.
-SAAS_NUM_KEYS=" MEDIA VOLUME MEDIUM_INDEX MEDIUM_COUNT FOLDER_INDEX FOLDER_COUNT FOLDER_IS_PLAYLIST
+SAAS_NUM_KEYS=" MEDIA VOLUME MEDIUM_INDEX MEDIUM_COUNT FOLDER_INDEX FOLDER_COUNT FOLDER_IS_PLAYLIST CAN_SAVE 
  TRACK_INDEX TRACK_COUNT DURATION POSITION POSITION_AT IN_PLAYLIST LIKED NOTICE_TIME "
 SAAS_TEXT_KEYS=" STATUS VIEW MEDIUM FOLDER FILE TITLE ARTIST ALBUM PLAYLIST NOTICE "
 
 saas_read() {
 	local f=${SAAS_VARS:-/dev/shm/saas/now.vars} k v key
+	# one space-separated list each, line breaks count as spaces
+	local num=" ${SAAS_NUM_KEYS//$'\n'/ } " text=" ${SAAS_TEXT_KEYS//$'\n'/ } "
 	SAAS_RUNNING=0
 	[[ -r $f ]] || return 1
 	# No `source`/eval: the file is written by the saas user, the dashboard may run as root.
@@ -33,9 +35,9 @@ saas_read() {
 	while IFS='=' read -r k v; do
 		key=${k#SAAS_}
 		[[ $k == SAAS_* && $key =~ ^[A-Z_]+$ ]] || continue
-		if [[ $SAAS_NUM_KEYS == *" $key "* ]]; then
+		if [[ $num == *" $key "* ]]; then
 			if [[ $v =~ ^[0-9]{1,15}$ ]]; then v=$((10#$v)); else v=0; fi
-		elif [[ $SAAS_TEXT_KEYS != *" $key "* ]]; then
+		elif [[ $text != *" $key "* ]]; then
 			continue
 		fi
 		printf -v "$k" '%s' "$v"
@@ -51,6 +53,8 @@ saas_lines() {
 	[[ $keep =~ ^[0-9]+$ ]] || keep=5
 	if ! saas_read; then
 		SAAS_LINE1="SaaS: not running"; SAAS_LINE2=""
+	elif [[ $SAAS_STATUS == standby ]]; then
+		SAAS_LINE1="Standby"; SAAS_LINE2=""
 	elif [[ $SAAS_MEDIA != 1 ]]; then
 		SAAS_LINE1="No media"; SAAS_LINE2=""
 	else
@@ -69,7 +73,7 @@ saas_lines() {
 
 		if [[ -n $SAAS_NOTICE ]] && ((now - SAAS_NOTICE_TIME < keep)); then
 			SAAS_LINE2=$SAAS_NOTICE
-		elif [[ -n $SAAS_PLAYLIST ]]; then
+		elif [[ -n $SAAS_PLAYLIST && $SAAS_CAN_SAVE == 1 ]]; then
 			if [[ $SAAS_IN_PLAYLIST == 1 ]]; then SAAS_LINE2="Saved in: $SAAS_PLAYLIST"
 			else SAAS_LINE2="Save to: $SAAS_PLAYLIST"; fi
 		else

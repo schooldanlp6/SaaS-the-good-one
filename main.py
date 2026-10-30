@@ -101,6 +101,10 @@ def build(cfg: Dict[str, Any], bus: Bus, config_path: str = ""):
         except Exception as exc:
             log.error("buttons disabled: %s", exc)
 
+    for spec in cfg["network"]:
+        from saas.sources.network import NetSource, make_factory
+        inputs.append(NetSource(bus, make_factory(spec), spec["poll"]))
+
     usb = cfg["sources"]["usb"]
     if usb["enabled"]:
         from saas.sources.usb import UsbSource
@@ -113,7 +117,7 @@ def build(cfg: Dict[str, Any], bus: Bus, config_path: str = ""):
 def run(cfg: Dict[str, Any], config_path: str = "") -> int:
     bus = Bus()
     player, inputs, outputs, chip = build(cfg, bus, config_path)
-    restart = False
+    restart = halt = False
     signal.signal(signal.SIGTERM, _on_sigterm)
 
     try:
@@ -126,6 +130,9 @@ def run(cfg: Dict[str, Any], config_path: str = "") -> int:
                 break
             if event is Event.RESTART:
                 restart = True
+                break
+            if event is Event.HALT:
+                halt = True
                 break
             player.handle(event, data)
     except (KeyboardInterrupt, Shutdown):
@@ -141,6 +148,8 @@ def run(cfg: Dict[str, Any], config_path: str = "") -> int:
             _safe(out.close)
         if chip is not None:
             _safe(chip.close)
+    if halt and not power_off(cfg["power"]["command"]):
+        restart = True  # poweroff refused: come back instead of leaving a dead box
     if restart:
         # After an OTA update: start the new code in place of this process. Works the
         # same under any init system or when started by hand (same PID, same terminal).
@@ -149,6 +158,24 @@ def run(cfg: Dict[str, Any], config_path: str = "") -> int:
         sys.stderr.flush()
         os.execv(sys.executable, [sys.executable, os.path.abspath(__file__), *sys.argv[1:]])
     return 0
+
+
+def power_off(command: List[str]) -> bool:
+    """Run the poweroff command (state is already saved). False if it failed."""
+    import subprocess
+    if not command:
+        command = ["poweroff"] if os.geteuid() == 0 else ["systemctl", "poweroff"]
+    log.info("powering off: %s", " ".join(command))
+    try:
+        r = subprocess.run(command, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.error("poweroff failed: %s", exc)
+        return False
+    if r.returncode != 0:
+        log.error("poweroff failed (exit %d): %s - run SaaS as root, or install.sh's polkit rule (systemd)",
+                  r.returncode, (r.stderr or r.stdout).strip())
+        return False
+    return True
 
 
 def _safe(fn) -> None:
@@ -162,12 +189,18 @@ def main(argv: List[str] = None) -> int:
     ap = argparse.ArgumentParser(description="SaaS - ScriptAsASystem music player")
     ap.add_argument("-c", "--config", default="/etc/saas/config.toml")
     ap.add_argument("--check", action="store_true", help="validate the config and exit")
+    ap.add_argument("--version", action="store_true", help="print version + codename and exit")
     ap.add_argument("--list-devices", action="store_true", help="list mpv audio devices and exit")
     ap.add_argument("--log-level", default=os.environ.get("SAAS_LOG_LEVEL", "INFO"))
     args = ap.parse_args(argv)
 
     logging.basicConfig(level=args.log_level.upper(),
                         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+
+    if args.version:
+        from saas.version import full
+        print(f"SaaS {full()}")
+        return 0
 
     if args.list_devices:
         from saas.backends.mpv_backend import list_devices

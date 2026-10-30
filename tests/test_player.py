@@ -276,7 +276,7 @@ def test_source_cycle_keeps_place_per_medium(backend, tmp_path):
     p.handle(Event.MEDIA_ADDED, a)
     p.handle(Event.MEDIA_ADDED, b)
     assert p.state.medium_name == "A_STICK" and p.state.medium_count == 2
-    assert p.state.notice == "medium added: B_STICK"
+    assert p.state.notice == "Medium added: B_STICK"
     p.handle(Event.PLAY_PAUSE)
     p.handle(Event.NEXT)
     backend.pos = 20.0
@@ -295,10 +295,10 @@ def test_source_cycle_single_and_none(backend, tmp_path):
     a, _ = two_sticks(tmp_path)
     p = make(backend)
     p.handle(Event.SOURCE_NEXT)
-    assert p.state.notice == "no media"
+    assert p.state.notice == "No media"
     p.handle(Event.MEDIA_ADDED, a)
     p.handle(Event.SOURCE_NEXT)
-    assert p.state.notice == "only medium: A_STICK"
+    assert p.state.notice == "Only medium: A_STICK"
 
 
 def test_removing_active_medium_falls_back(backend, tmp_path):
@@ -309,7 +309,7 @@ def test_removing_active_medium_falls_back(backend, tmp_path):
     p.handle(Event.PLAY_PAUSE)
     p.handle(Event.MEDIA_REMOVED, a)
     assert p.state.medium_name == "B_STICK" and p.state.status == STOPPED and p.state.medium_count == 1
-    assert p.state.notice == "medium removed: A_STICK"
+    assert p.state.notice == "Medium removed: A_STICK"
     p.handle(Event.MEDIA_REMOVED, b)
     assert p.state.status == IDLE and p.state.medium_count == 0
 
@@ -343,3 +343,37 @@ def test_boot_prefers_last_active_medium(backend, tmp_path):
     p3.handle(Event.NEXT)
     p3.handle(Event.MEDIA_ADDED, b)
     assert p3.state.medium_name == "A_STICK"
+
+
+def test_standby_stops_and_wakes_where_it_was(backend, music):
+    p = make(backend)
+    p.handle(Event.MEDIA_ADDED, music)
+    p.handle(Event.PLAY_PAUSE)
+    p.handle(Event.NEXT)
+    backend.pos = 31.0
+    p.handle(Event.STANDBY)
+    assert p.state.standby and p.state.status == STOPPED and backend.calls[-1] == ("stop",)
+    assert p.state.notice == "Standby"
+    n = len(plays(backend))
+    p.handle(Event.NEXT)                      # any button only wakes - it does NOT skip
+    assert not p.state.standby and p.state.notice == "Awake"
+    assert plays(backend)[n:] == [("play", plays(backend)[-1][1], 31.0, False)]
+    assert p.state.track_name == "2 b.flac"
+
+
+def test_standby_while_stopped_stays_stopped_and_blocks_autoplay(backend, music):
+    p = make(backend, autoplay=True)
+    p.handle(Event.STANDBY)
+    p.handle(Event.MEDIA_ADDED, music)        # a stick arrives during standby
+    assert p.state.standby and p.state.media and plays(backend) == []
+    p.handle(Event.STANDBY)
+    assert not p.state.standby and plays(backend) == []   # wasn't playing before
+
+
+def test_poweroff_asks_main_to_halt(backend, music):
+    bus = Bus()
+    p = Player(bus, backend, extensions=["flac", "mp3"])
+    p.handle(Event.STANDBY)
+    p.handle(Event.POWEROFF)                  # works from standby too (no wake first)
+    assert p.state.notice == "Powering off"
+    assert bus.get(0) == (Event.HALT, None)

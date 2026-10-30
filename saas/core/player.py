@@ -88,6 +88,7 @@ class Player:
         self._auto_activated = False  # active medium was picked automatically, not by the user
         # last place per view on the active medium: view -> (folder key, track index, seconds)
         self._view_mem: Dict[str, tuple] = {}
+        self._wake_resumes = False    # standby interrupted playback -> resume on wake
 
         self._resume_data: Dict[str, Any] = _migrate(resume.load() if resume else {})
         saved_volume = self._resume_data.get("volume")
@@ -125,6 +126,8 @@ class Player:
             Event.LIKE: self._like,
             Event.VIEW_TOGGLE: self._view_toggle,
             Event.UPDATE: self._update,
+            Event.STANDBY: self._standby,
+            Event.POWEROFF: self._poweroff,
         }
 
     # public API used by main.py -------------------------------------------
@@ -138,6 +141,8 @@ class Player:
             return
         if event.value in USER_EVENTS:
             self._auto_activated = False
+            if self.state.standby and event not in (Event.STANDBY, Event.POWEROFF):
+                event, handler = Event.STANDBY, self._standby   # any button wakes; the press is used up
         try:
             handler(data)
         except Exception:
@@ -216,6 +221,7 @@ class Player:
         s.folder_name = lib.folder_label(s.folder_index)
         s.track_count = len(tracks)
         s.in_playlist = lib.is_playlist(s.folder_index)
+        s.can_save = lib.playlists is not None
         s.view = "playlists" if s.in_playlist else "folders"
         idxs = self._view_indices(s.view)
         s.view_count = len(idxs)
@@ -249,7 +255,11 @@ class Player:
         self._current_path = path
         s.title = s.artist = s.album = ""
         s.duration = 0.0
-        log.info("%s %s", "loading" if paused else "playing", path)
+        tags = self.library.track_tags(s.folder_index, s.track_index)
+        if tags:  # network media know their tags up front
+            self._track_info(tags)
+        shown = path if self.library.is_local else f"{self.library.root} / {s.track_name}"
+        log.info("%s %s", "loading" if paused else "playing", shown)
         self.backend.play(path, start=position, paused=paused)
         s.status = PAUSED if paused else PLAYING
 
@@ -303,7 +313,7 @@ class Player:
     def _idle_state(self) -> PlayerState:
         s = self.state
         return PlayerState(volume=s.volume, active_playlist=s.active_playlist,
-                           notice=s.notice, notice_time=s.notice_time)
+                           notice=s.notice, notice_time=s.notice_time, standby=s.standby)
 
     def _notice(self, text: str) -> None:
         log.info("%s", text)
@@ -343,28 +353,33 @@ class Player:
             self._start_position = 0.0
 
     def _media_added(self, root: Any) -> None:
-        root = str(root)
-        if root in self.media:
-            return
-        store = PlaylistStore(root, self.playlist_dir) if self.playlist_dir else None
-        lib = Library(root, self.extensions, store)
-        lib.scan()
+        if isinstance(root, str):            # a stick / folder: scan it here
+            if root in self.media:
+                return
+            store = PlaylistStore(root, self.playlist_dir) if self.playlist_dir else None
+            lib = Library(root, self.extensions, store)
+            lib.scan()
+        else:                                # a network library, already loaded by its source
+            lib, root = root, root.root
+            if root in self.media:
+                return
         name = self._medium_name(root)
         if not lib.folders:
             log.warning("no playable files under %s", root)
-            self._notice(f"no music on {name}")
+            self._notice(f"No music on {name}")
             return
         self.media[root] = lib
+        autoplay = self.autoplay and not self.state.standby
         if self.library is None:
             self._auto_activated = True
-            self._activate(root, play=self.autoplay)
+            self._activate(root, play=autoplay)
         elif self._auto_activated and lib.fingerprint == self._resume_data.get("active") \
                 and self.library.fingerprint != lib.fingerprint:
             # Several sticks at boot: prefer the one that was active last time.
             log.info("switching to %s (active last time)", name)
-            self._activate(root, play=self.autoplay)
+            self._activate(root, play=autoplay)
         else:
-            self._notice(f"medium added: {name}")
+            self._notice(f"Medium added: {name}")
 
     def _media_removed(self, root: Any) -> None:
         root = str(root) if root else self.active_root
@@ -388,21 +403,21 @@ class Player:
                 self._activate(next(iter(self.media)), play=False)
         else:
             del self.media[root]
-        self._notice(f"medium removed: {name}")
+        self._notice(f"Medium removed: {name}")
 
     def _source_next(self, _: Any) -> None:
         roots = list(self.media)
         if not roots:
-            self._notice("no media")
+            self._notice("No media")
             return
         if len(roots) == 1:
-            self._notice(f"only medium: {self._medium_name(roots[0])}")
+            self._notice(f"Only medium: {self._medium_name(roots[0])}")
             return
         i = roots.index(self.active_root) if self.active_root in roots else -1
         nxt = roots[(i + 1) % len(roots)]
         was_playing = self.state.status == PLAYING
         self._activate(nxt, play=was_playing)
-        self._notice(f"medium: {self._medium_name(nxt)}")
+        self._notice(f"Medium: {self._medium_name(nxt)}")
 
     # playback event handlers --------------------------------------------------------
     def _play_pause(self, _: Any) -> None:
@@ -459,7 +474,7 @@ class Player:
         if reason == "error":
             self._errors += 1
             path = self._current_path or "?"
-            if not os.path.exists(path):
+            if self.library.is_local and not os.path.exists(path):
                 log.warning("%s vanished (media pulled?) - stopping", path)
                 self.backend.stop()
                 s.status = STOPPED
@@ -481,13 +496,14 @@ class Player:
         if not self._has_media or not isinstance(info, dict):
             return
         s = self.state
-        s.title = str(info.get("title") or "")
-        s.artist = str(info.get("artist") or "")
-        s.album = str(info.get("album") or "")
+        # keep what we already know (network tags) when mpv reports nothing
+        s.title = str(info.get("title") or "") or s.title
+        s.artist = str(info.get("artist") or "") or s.artist
+        s.album = str(info.get("album") or "") or s.album
         try:
-            s.duration = float(info.get("duration") or 0.0)
+            s.duration = float(info.get("duration") or 0.0) or s.duration
         except (TypeError, ValueError):
-            s.duration = 0.0
+            pass
 
     def _toggle_in(self, name: str) -> Optional[bool]:
         """Add the current track to playlist `name`, or remove it if it's there.
@@ -498,7 +514,10 @@ class Player:
         s, lib = self.state, self.library
         rel = self._current_rel()
         if rel is None:
-            self._notice("nothing playing")
+            self._notice("Nothing playing")
+            return None
+        if lib.playlists is None:
+            self._notice("Playlists only on sticks")
             return None
         try:
             if lib.playlists.contains(name, rel):
@@ -508,7 +527,7 @@ class Player:
                 lib.playlists.add(name, rel)
                 added = True
         except OSError as exc:
-            self._notice(f"cannot write {name}: {exc.strerror}")
+            self._notice(f"Cannot write {name}: {exc.strerror}")
             return None
         # playlists may have appeared / vanished / shrunk: re-find our place
         key = lib.folders[s.folder_index]
@@ -536,6 +555,31 @@ class Player:
         self._refresh_labels()
         return added
 
+    # standby + poweroff --------------------------------------------------------
+    def _standby(self, _: Any) -> None:
+        s = self.state
+        if s.standby:  # wake up
+            s.standby = False
+            if self._wake_resumes and self._has_media and s.track_count:
+                self._start(self._start_position)
+                self._start_position = 0.0
+            self._wake_resumes = False
+            self._notice("Awake")
+            return
+        self._wake_resumes = s.status == PLAYING
+        if s.status in (PLAYING, PAUSED):
+            self._start_position = self.backend.position() or 0.0
+            self.backend.stop()  # mpv closes the audio device when idle
+            s.status = STOPPED
+        s.standby = True
+        self._remember()
+        self._notice("Standby")
+
+    def _poweroff(self, _: Any) -> None:
+        self._notice("Powering off")
+        self.publish()
+        self.bus.emit(Event.HALT)
+
     def _update(self, _: Any) -> None:
         if self.updater is None:
             self._notice("Updates are disabled")
@@ -554,7 +598,7 @@ class Player:
         """Jump between the folders and the playlists, each at its last place."""
         s, lib = self.state, self.library
         if not self._has_media:
-            self._notice("no media")
+            self._notice("No media")
             return
         other = "playlists" if s.view == "folders" else "folders"
         targets = self._view_indices(other)
@@ -596,13 +640,13 @@ class Player:
         if not self.playlist_dir:
             log.warning("playlist new: playlists are disabled")
             return
-        if not self._has_media:
+        if not self._has_media or self.library.playlists is None:
             self._notice("No stick for playlists")
             return
         try:
             name = self.library.playlists.create_numbered()
         except OSError as exc:
-            self._notice(f"cannot create playlist: {exc.strerror}")
+            self._notice(f"Cannot create playlist: {exc.strerror}")
             return
         self.state.active_playlist = name   # "save" goes there from now on
         self._refresh_playlist_flags()
@@ -617,7 +661,8 @@ class Player:
         if not self.playlist_dir:
             log.warning("playlist next: playlists are disabled")
             return
-        names = [n for n in (self.library.playlists.names() if self._has_media else [])
+        store = self.library.playlists if self._has_media else None
+        names = [n for n in (store.names() if store else [])
                  if n != self.liked_playlist]   # liked has its own button
         if self.default_playlist not in names:
             names.append(self.default_playlist)

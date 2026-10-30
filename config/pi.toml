@@ -29,6 +29,32 @@ dir     = "DLP6/Playlists"
 default = "Favorites"
 liked   = "Liked Songs"   # the like button's playlist
 
+# Network servers: each one is one more medium for `*` (folders = albums).
+# This file then holds passwords/keys: install.sh makes it readable for root + saas only.
+#
+# [[network]]
+# type    = "jellyfin"
+# name    = "Jellyfin"
+# url     = "http://192.168.1.10:8096"
+# api_key = "..."            # Jellyfin dashboard -> API Keys
+# user    = "dan"
+#
+# [[network]]
+# type     = "subsonic"      # Navidrome, Airsonic, Gonic, ...
+# name     = "Navidrome"
+# url      = "http://192.168.1.10:4533"
+# user     = "dan"
+# password = "..."
+# auth     = "token"         # "password" for servers without token auth
+#
+# [[network]]
+# type     = "dlna"          # minidlna, NAS boxes, Jellyfin's DLNA plugin, ...
+# name     = "NAS"
+# location = ""              # e.g. "http://192.168.1.5:8200/rootDesc.xml"; empty = find it on the LAN
+# server   = ""              # with discovery: pick the server whose name contains this
+# start    = "Music/Folders" # one view of the server, else every view shows the same songs again
+# poll     = 60              # seconds between "still there?" checks (any type)
+
 # OTA updates: put a release package (zip or tar.gz) on a stick as
 # DLP6/Update/saas.pub, press update (U) once to look, again to install.
 [update]
@@ -75,6 +101,10 @@ source_next   = 12   # cycle through the plugged-in sticks (keyboard: *)
 like          = 19   # toggle the song in "Liked Songs" (keyboard: f)
 view_toggle   = 20   # folder up/down: folders <-> playlists (keyboard: v)
 update        = 21   # OTA from the stick: 1st press search, 2nd press install (keyboard: U)
+# GPIO3 (header pin 5): short = standby (keyboard: z), hold 3 s = power off.
+# After a power off the Pi firmware boots again when GPIO3 goes low, so this
+# one button also switches the box back on. (GPIO3 is I2C SDA: leave I2C off.)
+standby       = { pin = 3, hold = "poweroff", hold_time = 3.0 }
 # or both on one button:  playlist_add = { pin = 16, hold = "playlist_next" }
 
 # LEDs: GPIO -> 330R..1k resistor -> LED -> GND.

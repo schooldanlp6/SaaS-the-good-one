@@ -77,10 +77,10 @@ def test_leds(chip):
     out = chip.outputs
     leds.update(PlayerState())
     assert not out[6] and not out[13]
-    s = PlayerState(status=PLAYING, media=True, folder_index=2, folder_count=5)   # folder 3 = 0b11
+    s = PlayerState(status=PLAYING, media=True, folder_index=2, folder_count=5, view_index=3)   # folder 3 = 0b11
     leds.update(s)
     assert out[6] and out[13] and out[19] and out[26]
-    s.folder_index = 3                                                            # folder 4 wraps to 0b00
+    s.folder_index, s.view_index = 3, 4                                                           # folder 4 wraps to 0b00
     leds.update(s.snapshot())
     assert not out[19] and not out[26]
     s.status = STOPPED
@@ -98,9 +98,9 @@ def test_leds(chip):
 
 def test_led_blink_count_then_on(chip):
     leds = LedOutput(chip, media=13, blink_on=0.03, blink_off=0.03)
-    leds.update(PlayerState(status=STOPPED, media=True, folder_index=0, folder_count=3))
+    leds.update(PlayerState(status=STOPPED, media=True, folder_index=0, folder_count=3, view_index=1))
     time.sleep(0.2)
-    leds.update(PlayerState(status=STOPPED, media=True, folder_index=1, folder_count=3))
+    leds.update(PlayerState(status=STOPPED, media=True, folder_index=1, folder_count=3, view_index=2))
     time.sleep(0.4)
     assert chip.outputs[13]   # back on after blinking "2"
     leds.update(PlayerState())
@@ -151,3 +151,12 @@ def test_usb_multi_layout(tmp_path):
     assert bus.get(0) == (Event.MEDIA_REMOVED, str(tmp_path / "STICK_A"))
     assert bus.get(0) == (Event.MEDIA_ADDED, str(tmp_path / "STICK_B"))
     assert UsbSource(Bus(), str(tmp_path), require_mountpoint=True, layout="multi").scan() == set()
+
+
+def test_led_folder_number_counts_inside_the_view(chip):
+    """0.6.4 fix: in the playlists view the 1st playlist is 1, not 'number of folders + 1'."""
+    leds = LedOutput(chip, media=13, folder_bits=[19, 26])
+    leds.update(PlayerState(status=PLAYING, media=True, folder_index=7, view="playlists",
+                            view_index=1, view_count=2))
+    assert chip.outputs[19] and not chip.outputs[26]          # 1 = 0b01
+    leds.close()

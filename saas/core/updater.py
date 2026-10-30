@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -137,6 +138,21 @@ def read_version(path: str) -> Optional[str]:
     return None
 
 
+_CODENAME_RE = re.compile(r'^CODENAME\s*=\s*["\']([a-z0-9-]{1,40})["\']', re.M)
+
+
+def read_codename(path: str) -> str:
+    """Codename inside a package (saas/version.py), "" if it has none."""
+    try:
+        for parts, data, isdir in _strip_top(_members(path)):
+            if parts == ["saas", "version.py"] and data is not None:
+                m = _CODENAME_RE.search(data.decode("utf-8", "replace"))
+                return m.group(1) if m else ""
+    except (UpdateError, OSError, zipfile.BadZipFile, tarfile.TarError):
+        pass
+    return ""
+
+
 def extract(path: str, dest: str) -> None:
     for parts, data, isdir in _strip_top(_members(path)):
         target = os.path.join(dest, *parts)
@@ -163,7 +179,7 @@ class Updater:
         self.rel_path = rel_path
         self.confirm_seconds = confirm_seconds
         self.check_timeout = check_timeout
-        self._offer: Optional[Tuple[str, str, float]] = None   # (path, version, time)
+        self._offer: Optional[Tuple[str, str, float]] = None   # (path, "version codename", time)
 
     @property
     def version(self) -> str:
@@ -212,9 +228,11 @@ class Updater:
             return "No update on the stick", False
         path, v = found
         if parse_version(v) <= (parse_version(self.version) or (0,)):
-            return f"Up to date ({self.version})", False
-        self._offer = (path, v, now)
-        return f"Update {v} found - U to install", False
+            from ..version import CODENAME
+            return f"Up to date ({self.version} {CODENAME})", False
+        label = f"{v} {read_codename(path)}".strip()
+        self._offer = (path, label, now)
+        return f"Update {label} found - U to install", False
 
     def install(self, package: str) -> None:
         if not os.access(self.app_dir, os.W_OK):
@@ -297,6 +315,9 @@ class Updater:
             os.remove(path)
         except OSError:
             return None
+        from ..version import CODENAME, version
+        if new == version():
+            new = f"{new} {CODENAME}"
         if flag == "system":
             return f"Updated to {new} - run install.sh for system parts"
         return f"Updated to {new}"

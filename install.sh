@@ -144,6 +144,8 @@ for g in audio gpio plugdev; do
 done
 mkdir -p "$STATE" && chown saas:saas "$STATE"
 chown -R saas:saas "$PREFIX"      # OTA updates write here
+# the config can hold server passwords / API keys: root writes, saas reads, nobody else
+chown root:saas "$ETC/config.toml" && chmod 640 "$ETC/config.toml"
 touch /var/log/saas.log && chown saas:saas /var/log/saas.log
 
 # --- udev auto-mount --------------------------------------------------------
@@ -168,6 +170,17 @@ if udevadm control --reload 2>/dev/null; then
 	udevadm trigger --action=add --subsystem-match=block --sysname-match='sd*' 2>/dev/null || true
 else
 	warn "could not reload udev rules (reboot will do it)"
+fi
+
+# --- poweroff button ------------------------------------------------------------
+# As root SaaS can just run `poweroff`. As the saas user under systemd, a polkit
+# rule allows exactly that one action; without systemd it needs root.
+if [ "$INIT" = systemd ] && [ -d /etc/polkit-1 ]; then
+	say "allowing the saas user to power off (polkit)"
+	mkdir -p /etc/polkit-1/rules.d
+	install -m 644 "$SRC/init/50-saas-poweroff.rules" /etc/polkit-1/rules.d/50-saas-poweroff.rules
+else
+	warn "poweroff button: works when SaaS runs as root (no systemd+polkit found for the saas user)"
 fi
 
 # --- service --------------------------------------------------------------

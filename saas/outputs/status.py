@@ -40,7 +40,8 @@ def _mmss(seconds: float) -> str:
 
 def build_status(s: PlayerState, position: Optional[float]) -> dict:
     return {
-        "status": s.status,
+        "status": "standby" if s.standby else s.status,
+        "standby": s.standby,
         "media": s.media,
         "volume": s.volume,
         "medium": {"name": s.medium_name, "index": s.medium_index, "count": s.medium_count},
@@ -55,6 +56,7 @@ def build_status(s: PlayerState, position: Optional[float]) -> dict:
                   "in_active_playlist": s.in_active_playlist, "liked": s.liked},
         "position_at": time.time(),
         "active_playlist": s.active_playlist,
+        "can_save": s.can_save,
         "notice": s.notice,
         "notice_time": s.notice_time,
     }
@@ -81,7 +83,8 @@ def build_vars(d: dict) -> str:
         ("TRACK_INDEX", t["index"]), ("TRACK_COUNT", t["count"]), ("FILE", t["file"]),
         ("TITLE", t["title"]), ("ARTIST", t["artist"]), ("ALBUM", t["album"]),
         ("DURATION", t["duration"]), ("POSITION", t["position"]), ("POSITION_AT", d["position_at"]),
-        ("PLAYLIST", d["active_playlist"]), ("IN_PLAYLIST", t["in_active_playlist"]), ("LIKED", t["liked"]),
+        ("PLAYLIST", d["active_playlist"]), ("CAN_SAVE", d["can_save"]),
+        ("IN_PLAYLIST", t["in_active_playlist"]), ("LIKED", t["liked"]),
         ("NOTICE", d["notice"]), ("NOTICE_TIME", d["notice_time"]),
     ]
     return "".join(f"SAAS_{k}={_flat(v)}\n" for k, v in pairs)
@@ -99,7 +102,7 @@ def build_line(d: dict) -> str:
             times = f"  [{_mmss(t['position'])}/{_mmss(t['duration'])}]" if t["duration"] else f"  [{_mmss(t['position'])}]"
         album = f"  {t['album']}" if t["album"] else ""
         line = f"{icon} {who}{times}{album}"
-    if d["active_playlist"]:
+    if d["active_playlist"] and d["can_save"]:
         line += f"  (pl: {d['active_playlist']})"
     return line
 

@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(not shutil.which("bash"), reason="needs bash")
 BASE = dict(status="playing", media=True, folder_index=1, folder_count=20, view_index=2, view_count=20,
             folder_name="Other",
             track_index=2, track_count=12, track_name="03 x.mp3", title="Beta", artist="Band B",
-            album="Album", duration=296, active_playlist="Favorites", volume=70)
+            album="Album", duration=296, active_playlist="Favorites", volume=70, can_save=True)
 
 
 def lines(tmp_path, state, **env):
@@ -78,3 +78,14 @@ def test_hostile_vars_file_executes_nothing(tmp_path):
 def test_playlist_view_label(tmp_path):
     st = PlayerState(**{**BASE, "view": "playlists", "view_index": 1, "view_count": 3, "in_playlist": True})
     assert lines(tmp_path, st)[0].endswith("Track 3/12 Playlist 1/3")
+
+
+def test_no_save_hint_on_servers(tmp_path):
+    st = PlayerState(**{**BASE, "can_save": False})
+    assert lines(tmp_path, st)[1] == ""                    # a server: nothing to save to
+    st = PlayerState(**{**BASE, "can_save": True})
+    assert lines(tmp_path, st)[1] == "Save to: Favorites"
+
+
+def test_standby_line(tmp_path):
+    assert lines(tmp_path, PlayerState(**{**BASE, "standby": True})) == ["Standby", ""]

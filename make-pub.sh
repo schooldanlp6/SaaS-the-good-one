@@ -64,4 +64,5 @@ tar -C "$TMP" -czf "$TMP/saas.pub" saas-player
 mv "$TMP/saas.pub" "$OUT"
 sync "$OUT" 2>/dev/null || sync
 
-echo "saas.pub $VERSION -> $OUT ($(du -h "$OUT" | cut -f1))"
+CODENAME=$(sed -n 's/^CODENAME *= *["'"'"']\([a-z0-9-]*\)["'"'"'].*/\1/p' "$ROOT/saas/version.py" 2>/dev/null)
+echo "saas.pub $VERSION${CODENAME:+ $CODENAME} -> $OUT ($(du -h "$OUT" | cut -f1))"

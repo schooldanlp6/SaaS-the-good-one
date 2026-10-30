@@ -32,6 +32,7 @@ fi
 say "removing udev rules + auto-mount helper"
 rm -f /etc/udev/rules.d/99-saas-usb.rules /etc/udev/rules.d/60-saas-gpio.rules /usr/local/sbin/saas-automount
 rm -f /usr/local/bin/saas-now /usr/local/sbin/saas-rollback /usr/local/sbin/saas-uninstall
+rm -f /etc/polkit-1/rules.d/50-saas-poweroff.rules
 udevadm control --reload 2>/dev/null
 
 say "removing /opt/saas and the status files"

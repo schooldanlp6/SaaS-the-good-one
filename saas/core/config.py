@@ -48,6 +48,13 @@ DEFAULTS: Dict[str, Any] = {
         "file": "DLP6/Update/saas.pub",   # on any stick, relative to its root
         "confirm_seconds": 20,            # 2nd press within this time installs
     },
+    # network servers, each one more medium for `*`:  [[network]] type = "jellyfin" ...
+    "network": [],
+    "power": {
+        # what `poweroff` runs after SaaS saved its state; [] = automatic:
+        # "poweroff" as root, else "systemctl poweroff" (install.sh adds a polkit rule)
+        "command": [],
+    },
     "state": {
         "file": "",                # empty = don't persist; written only on a clean exit
         "save_interval": None,     # obsolete (state is only saved on exit), still accepted
@@ -154,6 +161,60 @@ def _parse_buttons(raw: Dict[str, Any], errors: List[str]) -> Dict[str, Dict[str
     return buttons
 
 
+_NET_KEYS = {
+    "jellyfin": ({"url", "api_key"}, {"user"}),
+    "subsonic": ({"url", "user", "password"}, {"auth"}),
+    "dlna": (set(), {"location", "server", "start"}),
+}
+
+
+def _parse_network(raw: Any, errors: List[str]) -> List[Dict[str, Any]]:
+    if not isinstance(raw, list):
+        errors.append("'network' must be a list of [[network]] tables")
+        return []
+    out, names = [], set()
+    for i, spec in enumerate(raw):
+        where = f"network[{i}]"
+        if not isinstance(spec, dict):
+            errors.append(f"'{where}' must be a table")
+            continue
+        kind = spec.get("type")
+        if kind not in _NET_KEYS:
+            errors.append(f"'{where}.type' must be one of {', '.join(_NET_KEYS)}")
+            continue
+        required, optional = _NET_KEYS[kind]
+        known = required | optional | {"type", "name", "poll"}
+        for k in sorted(set(spec) - known):
+            errors.append(f"'{where}.{k}': unknown option for {kind}")
+        bad = False
+        for k in sorted(required):
+            if not isinstance(spec.get(k), str) or not spec[k]:
+                errors.append(f"'{where}.{k}' is required for {kind}")
+                bad = True
+        for k in sorted(optional):
+            if k in spec and not isinstance(spec[k], str):
+                errors.append(f"'{where}.{k}' must be a string")
+                bad = True
+        if "url" in spec and isinstance(spec["url"], str) and not spec["url"].startswith(("http://", "https://")):
+            errors.append(f"'{where}.url' must start with http:// or https://")
+            bad = True
+        if kind == "subsonic" and spec.get("auth", "token") not in ("token", "password"):
+            errors.append(f"'{where}.auth' must be \"token\" or \"password\"")
+            bad = True
+        poll = spec.get("poll", 60)
+        if isinstance(poll, bool) or not isinstance(poll, (int, float)) or not 10 <= poll <= 3600:
+            errors.append(f"'{where}.poll' must be 10-3600 seconds")
+            bad = True
+        name = spec.get("name") or kind.capitalize()
+        if not isinstance(name, str) or name in names:
+            errors.append(f"'{where}.name' {name!r} is used twice (or not a string)")
+            bad = True
+        if not bad:
+            names.add(name)
+            out.append({**spec, "name": name, "poll": float(poll)})
+    return out
+
+
 def validate(raw: Dict[str, Any]) -> Dict[str, Any]:
     errors: List[str] = []
     cfg = _merge(DEFAULTS, raw, "", errors)
@@ -214,6 +275,12 @@ def validate(raw: Dict[str, Any]) -> Dict[str, Any]:
         else:
             up["file"] = _clean_rel(up["file"])
         _num(up, "confirm_seconds", 3, 300, "update", errors)
+
+    cfg["network"] = _parse_network(cfg["network"], errors)
+
+    cmd = cfg["power"]["command"]
+    if not isinstance(cmd, list) or not all(isinstance(c, str) and c for c in cmd):
+        errors.append("'power.command' must be a list of strings, e.g. [\"systemctl\", \"poweroff\"]")
 
     st = cfg["state"]
     if not isinstance(st["file"], str):

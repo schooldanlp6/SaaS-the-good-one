@@ -85,3 +85,31 @@ def test_playlist_names_validated():
 def test_missing_file():
     with pytest.raises(ConfigError, match="not found"):
         load("/nonexistent/x.toml")
+
+
+def test_network_entries():
+    cfg = validate(base(network=[
+        {"type": "jellyfin", "url": "http://h:8096", "api_key": "k", "user": "dan"},
+        {"type": "subsonic", "name": "Navi", "url": "https://n", "user": "u", "password": "p", "auth": "password"},
+        {"type": "dlna", "start": "Music/Folders"},
+    ]))
+    assert [n["name"] for n in cfg["network"]] == ["Jellyfin", "Navi", "Dlna"]
+    assert cfg["network"][0]["poll"] == 60.0
+    with pytest.raises(ConfigError) as exc:
+        validate(base(network=[
+            {"type": "jellyfin", "url": "h:8096"},                       # no scheme, no api_key
+            {"type": "subsonic", "url": "http://n", "user": "u", "password": "p", "auth": "md5"},
+            {"type": "plex"},
+            {"type": "dlna", "name": "X", "bogus": 1},
+            {"type": "dlna", "name": "X"},                               # duplicate name
+        ]))
+    msg = str(exc.value)
+    for piece in ("network[0].api_key", "network[0].url", "network[1].auth", "network[2].type",
+                  "network[3].bogus", "used twice"):
+        assert piece in msg
+
+
+def test_power_command():
+    assert validate(base(power={"command": ["sudo", "halt"]}))["power"]["command"] == ["sudo", "halt"]
+    with pytest.raises(ConfigError, match="power.command"):
+        validate(base(power={"command": "poweroff"}))

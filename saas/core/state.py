@@ -20,6 +20,7 @@ class PlayerState:
     track_count: int = 0
     track_name: str = ""
     volume: int = 80
+    standby: bool = False       # soft standby: nothing plays, outputs go dark
     medium_name: str = ""       # e.g. the stick's label
     medium_index: int = 0       # 1-based, 0 = none
     medium_count: int = 0
@@ -35,6 +36,7 @@ class PlayerState:
     duration: float = 0.0
     # status: which playlist "add" goes to, and the last thing that happened
     active_playlist: str = ""
+    can_save: bool = False             # the active medium can hold playlists (sticks yes, servers no)
     in_active_playlist: bool = False   # current track is already in active_playlist
     liked: bool = False                # current track is in the liked playlist
     notice: str = ""
