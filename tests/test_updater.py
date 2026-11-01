@@ -75,7 +75,7 @@ def test_messages_before_install(app, tmp_path):
     (tmp_path / "EMPTY").mkdir()
     assert u.press([str(tmp_path / "EMPTY")]) == ("No update on the stick", False)
     old = stick_with(tmp_path, make_release(tmp_path, "0.6.1", "same"), name="OLD")
-    assert u.press([old]) == ("Up to date (0.6.1 janky-jellyfish)", False)
+    assert u.press([old]) == ("Up to date (0.6.1 singing-submarine)", False)
 
 
 def test_two_presses_install_and_restart(app, tmp_path):
@@ -84,15 +84,15 @@ def test_two_presses_install_and_restart(app, tmp_path):
     s2 = stick_with(tmp_path, make_release(tmp_path, "0.7.0", "r2"), "tgz", name="S2")
     u = Updater(str(a), str(cfg))
     announced = []
-    assert u.press([s1, s2]) == ("Update 0.7.0 janky-jellyfish found - U to install", False)   # newest wins
+    assert u.press([s1, s2]) == ("Update 0.7.0 singing-submarine found - U to install", False)   # newest wins
     msg, restart = u.press([s1, s2], announced.append)
-    assert (msg, restart) == ("Updated to 0.7.0 janky-jellyfish, restarting", True)
-    assert announced == ["Updating to 0.7.0 janky-jellyfish..."]
+    assert (msg, restart) == ("Updated to 0.7.0 singing-submarine, restarting", True)
+    assert announced == ["Updating to 0.7.0 singing-submarine..."]
     assert (a / "VERSION").read_text().strip() == "0.7.0"
     assert (a / ".previous" / "VERSION").read_text().strip() == "0.6.1"
     assert (a / "package" / "install.sh").exists()
     assert not [p for p in os.listdir(a) if p.startswith(".update-")]       # staging cleaned up
-    assert u.consume_marker() == "Updated to 0.7.0" and u.consume_marker() is None
+    assert u.consume_marker() == "Updated to 0.7.0 - see notes" and u.consume_marker() is None
 
 
 def test_offer_expires(app, tmp_path):
@@ -101,7 +101,7 @@ def test_offer_expires(app, tmp_path):
     u = Updater(str(a), str(cfg), confirm_seconds=0.2)
     u.press([s])
     time.sleep(0.3)
-    assert u.press([s])[0] == "Update 0.6.2 janky-jellyfish found - U to install"   # just offered again
+    assert u.press([s])[0] == "Update 0.6.2 singing-submarine found - U to install"   # just offered again
     assert (a / "VERSION").read_text().strip() == "0.6.1"
 
 
@@ -131,7 +131,7 @@ def test_system_parts_changed_is_reported(app, tmp_path):
     s = stick_with(tmp_path, rel)
     u = Updater(str(a), str(cfg))
     u.press([s]); u.press([s])
-    assert u.consume_marker() == "Updated to 0.6.2 - run install.sh for system parts"
+    assert u.consume_marker() == "Updated to 0.6.2 - run install.sh for system parts, see notes"
 
 
 @pytest.mark.skipif(not shutil.which("patch"), reason="needs patch")
@@ -182,8 +182,8 @@ def test_make_pub_builds_an_installable_package(app, tmp_path):
     r = subprocess.run(["bash", str(proj / "make-pub.sh"), "--stick", str(tmp_path / "STICK")],
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
-    pub = tmp_path / "STICK" / "DLP6" / "Update" / "saas.pub"
-    assert "saas.pub 0.6.9" in r.stdout and read_version(str(pub)) == "0.6.9"
+    pub = tmp_path / "STICK" / "DLP6" / "Update" / "UPDATE4SAAS.pub"
+    assert "UPDATE4SAAS.pub 0.6.9" in r.stdout and read_version(str(pub)) == "0.6.9"
     with tarfile.open(pub) as t:
         names = t.getnames()
     assert all(n.startswith("saas-player") for n in names)
@@ -199,7 +199,7 @@ def test_make_pub_refuses_broken_code(tmp_path):
     proj = make_release(tmp_path, "0.6.9", "proj",
                         tweak=lambda r: (r / "saas" / "core" / "player.py").write_text("def (:\n"))
     r = subprocess.run(["bash", str(proj / "make-pub.sh")], capture_output=True, text=True)
-    assert r.returncode != 0 and "syntax error" in r.stderr and not (proj / "saas.pub").exists()
+    assert r.returncode != 0 and "syntax error" in r.stderr and not (proj / "UPDATE4SAAS.pub").exists()
     (proj / "VERSION").write_text("banana\n")
     r = subprocess.run(["bash", str(proj / "make-pub.sh")], capture_output=True, text=True)
     assert "is not like 1.2.3" in r.stderr
@@ -208,6 +208,47 @@ def test_make_pub_refuses_broken_code(tmp_path):
 def test_codename_read_from_package(tmp_path):
     from saas.core.updater import read_codename
     rel = make_release(tmp_path, "0.6.9")
-    assert read_codename(str(pack(rel, tmp_path / "a.pub"))) == "janky-jellyfish"
+    assert read_codename(str(pack(rel, tmp_path / "a.pub"))) == "singing-submarine"
     (rel / "saas" / "version.py").write_text("x = 1\n")
     assert read_codename(str(pack(rel, tmp_path / "b.pub", "tgz"))) == ""
+
+
+def test_both_update_names_are_found(tmp_path, app):
+    """0.6.5: UPDATE4SAAS.pub is the new name; saas.pub (old name / old configs) still works."""
+    a, cfg = app
+    stick = tmp_path / "S"
+    (stick / "DLP6" / "Update").mkdir(parents=True)
+    old = pack(make_release(tmp_path, "0.7.0", "r1"), stick / "DLP6" / "Update" / "saas.pub")
+    for rel_path in ("DLP6/Update/UPDATE4SAAS.pub", "DLP6/Update/saas.pub", "elsewhere/x.pub"):
+        assert Updater(str(a), str(cfg), rel_path=rel_path).find([str(stick)]) == (str(old), "0.7.0")
+    new = pack(make_release(tmp_path, "0.7.1", "r2"), stick / "DLP6" / "Update" / "UPDATE4SAAS.pub")
+    assert Updater(str(a), str(cfg), rel_path="DLP6/Update/saas.pub").find([str(stick)]) == (str(new), "0.7.1")
+
+
+def test_make_pub_old_name(tmp_path):
+    import subprocess
+    proj = make_release(tmp_path, "0.6.9", "proj")
+    (tmp_path / "STICK").mkdir()
+    r = subprocess.run(["bash", str(proj / "make-pub.sh"), "--old-name", "--stick", str(tmp_path / "STICK")],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert (tmp_path / "STICK" / "DLP6" / "Update" / "saas.pub").is_file()
+
+
+def test_notes_message_after_update(tmp_path, app):
+    a, cfg = app
+    (a / ".updated").write_text("0.6.4 0.6.5 system\n")
+    (a / "NOTES").write_text("hi\n")
+    assert Updater(str(a), str(cfg)).consume_marker() == \
+        "Updated to 0.6.5 singing-submarine - run install.sh for system parts, see notes"
+
+
+def test_notes_found_in_package_after_old_updater(tmp_path, app):
+    """A 0.6.4 updater doesn't copy NOTES into the app dir; package/NOTES counts."""
+    from saas.core.updater import notes_path
+    a, cfg = app
+    (a / "NOTES").unlink(missing_ok=True)
+    assert notes_path(str(a)) is None
+    (a / "package").mkdir(exist_ok=True)
+    (a / "package" / "NOTES").write_text("x\n")
+    assert notes_path(str(a)) == str(a / "package" / "NOTES")

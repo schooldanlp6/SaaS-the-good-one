@@ -1,6 +1,7 @@
-"""OTA updates from a USB stick: <stick>/DLP6/Update/saas.pub
+"""OTA updates from a USB stick: <stick>/DLP6/Update/UPDATE4SAAS.pub
 
-saas.pub is a release package (zip or tar.gz, e.g. saas-player/ with VERSION,
+UPDATE4SAAS.pub (the old name saas.pub works too) is a release package
+(zip or tar.gz, e.g. saas-player/ with VERSION,
 main.py, saas/, init/, ...). Flow, driven by the `update` button / U key:
 
   1st press  search all sticks, pick the newest version > the installed one
@@ -32,12 +33,23 @@ from typing import List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
-DEFAULT_FILE = "DLP6/Update/saas.pub"
-PROGRAM_ITEMS = ("saas", "main.py", "pctool.py", "VERSION")   # what OTA replaces
+DEFAULT_FILE = "DLP6/Update/UPDATE4SAAS.pub"
+# Always looked for as well, whatever the config says (saas.pub = name before 0.6.5)
+KNOWN_FILES = ("DLP6/Update/UPDATE4SAAS.pub", "DLP6/Update/saas.pub")
+PROGRAM_ITEMS = ("saas", "main.py", "pctool.py", "VERSION", "NOTES")   # what OTA replaces
 SYSTEM_FILES = ("install.sh", "uninstall.sh", "saas-now.sh")    # + everything in init/
 MAX_MEMBERS = 3000
 MAX_BYTES = 50 * 1024 * 1024
 MARKER = ".updated"
+
+
+def notes_path(app_dir: str) -> Optional[str]:
+    """The installed release notes. An update done by a pre-0.6.5 player doesn't
+    copy NOTES into the app dir, but the whole package sits in <app>/package."""
+    for path in (os.path.join(app_dir, "NOTES"), os.path.join(app_dir, "package", "NOTES")):
+        if os.path.isfile(path):
+            return path
+    return None
 
 
 class UpdateError(Exception):
@@ -105,7 +117,7 @@ def _members(path: str) -> List[Tuple[str, Optional[bytes], bool]]:
                 else:
                     raise UpdateError(f"package contains a link/special file: {m.name}")
     else:
-        raise UpdateError("saas.pub is neither a zip nor a tar.gz")
+        raise UpdateError(f"{os.path.basename(path)} is neither a zip nor a tar.gz")
     return out
 
 
@@ -192,13 +204,15 @@ class Updater:
     def find(self, roots: List[str]) -> Optional[Tuple[str, str]]:
         """Newest package on any stick: (path, version), or None."""
         best = None
+        names = list(dict.fromkeys([self.rel_path, *KNOWN_FILES]))
         for root in roots:
-            path = os.path.join(root, *self.rel_path.split("/"))
-            if not os.path.isfile(path):
-                continue
-            v = read_version(path)
-            if v and (best is None or parse_version(v) > parse_version(best[1])):
-                best = (path, v)
+            for rel in names:
+                path = os.path.join(root, *rel.split("/"))
+                if not os.path.isfile(path):
+                    continue
+                v = read_version(path)
+                if v and (best is None or parse_version(v) > parse_version(best[1])):
+                    best = (path, v)
         return best
 
     def press(self, roots: List[str], announce=None) -> Tuple[str, bool]:
@@ -318,6 +332,7 @@ class Updater:
         from ..version import CODENAME, version
         if new == version():
             new = f"{new} {CODENAME}"
+        notes = " - see notes" if notes_path(self.app_dir) else ""
         if flag == "system":
-            return f"Updated to {new} - run install.sh for system parts"
-        return f"Updated to {new}"
+            return f"Updated to {new} - run install.sh for system parts" + (", see notes" if notes else "")
+        return f"Updated to {new}{notes}"

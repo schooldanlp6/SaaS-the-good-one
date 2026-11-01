@@ -45,7 +45,7 @@ DEFAULTS: Dict[str, Any] = {
     },
     "update": {
         "enabled": True,
-        "file": "DLP6/Update/saas.pub",   # on any stick, relative to its root
+        "file": "DLP6/Update/UPDATE4SAAS.pub",   # on any stick; saas.pub (old name) works too
         "confirm_seconds": 20,            # 2nd press within this time installs
     },
     # network servers, each one more medium for `*`:  [[network]] type = "jellyfin" ...
@@ -128,6 +128,11 @@ def _pin(value: Any, where: str, errors: List[str]) -> bool:
     return True
 
 
+# Long press of next/prev scrubs through the song unless the config says otherwise.
+_DEFAULT_HOLD = {"next": "seek_fwd", "prev": "seek_back"}
+SCRUB_EVENTS = ("seek_fwd", "seek_back")   # hold events that repeat while held
+
+
 def _parse_buttons(raw: Dict[str, Any], errors: List[str]) -> Dict[str, Dict[str, Any]]:
     buttons: Dict[str, Dict[str, Any]] = {}
     for name, spec in raw.items():
@@ -145,15 +150,19 @@ def _parse_buttons(raw: Dict[str, Any], errors: List[str]) -> Dict[str, Dict[str
             continue
         if not _pin(spec["pin"], where, errors):
             continue
-        hold = spec.get("hold")
+        hold = spec.get("hold", _DEFAULT_HOLD.get(name))
+        if hold is False or hold == "":
+            hold = None          # hold = false: no long press (e.g. next/prev without scrubbing)
         if hold is not None and hold not in USER_EVENTS:
             errors.append(f"'{where}.hold': unknown event {hold!r}")
             continue
         repeat = bool(spec.get("repeat", False))
+        if repeat and "hold" not in spec:
+            hold = None
         if repeat and hold is not None:
             errors.append(f"'{where}': 'repeat' and 'hold' can't be combined")
             continue
-        hold_time = spec.get("hold_time", 0.4 if repeat else 1.0)
+        hold_time = spec.get("hold_time", 0.4 if repeat else 0.5 if hold in SCRUB_EVENTS else 1.0)
         if isinstance(hold_time, bool) or not isinstance(hold_time, (int, float)) or not 0.05 <= hold_time <= 10:
             errors.append(f"'{where}.hold_time' must be 0.05-10 seconds")
             continue
@@ -165,6 +174,7 @@ _NET_KEYS = {
     "jellyfin": ({"url", "api_key"}, {"user"}),
     "subsonic": ({"url", "user", "password"}, {"auth"}),
     "dlna": (set(), {"location", "server", "start"}),
+    "lms": ({"url"}, {"view", "start", "user", "password"}),
 }
 
 
@@ -197,6 +207,9 @@ def _parse_network(raw: Any, errors: List[str]) -> List[Dict[str, Any]]:
                 bad = True
         if "url" in spec and isinstance(spec["url"], str) and not spec["url"].startswith(("http://", "https://")):
             errors.append(f"'{where}.url' must start with http:// or https://")
+            bad = True
+        if kind == "lms" and spec.get("view", "folders") not in ("folders", "albums"):
+            errors.append(f"'{where}.view' must be \"folders\" or \"albums\"")
             bad = True
         if kind == "subsonic" and spec.get("auth", "token") not in ("token", "password"):
             errors.append(f"'{where}.auth' must be \"token\" or \"password\"")

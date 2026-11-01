@@ -377,3 +377,32 @@ def test_poweroff_asks_main_to_halt(backend, music):
     p.handle(Event.POWEROFF)                  # works from standby too (no wake first)
     assert p.state.notice == "Powering off"
     assert bus.get(0) == (Event.HALT, None)
+
+
+def test_scrub_seeks_without_skipping(backend, music):
+    """0.6.5: seek_fwd/seek_back (held next/prev) move inside the song and speed up."""
+    p = make(backend)
+    p.handle(Event.MEDIA_ADDED, music)
+    p.handle(Event.SEEK_FWD, 0)                 # stopped: nothing happens
+    assert not [c for c in backend.calls if c[0] == "seek"]
+    p.handle(Event.PLAY_PAUSE)
+    p.handle(Event.TRACK_INFO, {"duration": 100.0})
+    backend.pos = 10.0
+    p.handle(Event.SEEK_FWD, 0)
+    assert backend.calls[-1] == ("seek", 12.0) and "» 0:12 / 1:40" == p.state.notice
+    p.handle(Event.SEEK_FWD, 1)                 # mpv may not have caught up: count from the target
+    assert backend.calls[-1] == ("seek", 14.0)
+    p.handle(Event.SEEK_FWD, 30)                # held long: 15 s steps, but never past the end
+    p.handle(Event.SEEK_FWD, 31)
+    p.handle(Event.SEEK_FWD, 32)
+    p.handle(Event.SEEK_FWD, 33)
+    p.handle(Event.SEEK_FWD, 34)
+    p.handle(Event.SEEK_FWD, 35)
+    assert backend.calls[-1] == ("seek", 99.0) and p.state.track_name == "1 a.flac"
+    p.handle(Event.SEEK_BACK, 30)
+    assert backend.calls[-1] == ("seek", 84.0)
+    p._scrub = None
+    backend.pos = 1.0
+    p.handle(Event.SEEK_BACK, 0)
+    assert backend.calls[-1] == ("seek", 0.0)   # clamped at the start
+    assert p.state.status == PLAYING and p.state.track_name == "1 a.flac"

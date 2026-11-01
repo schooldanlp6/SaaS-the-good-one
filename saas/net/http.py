@@ -41,4 +41,8 @@ def query(params: Dict[str, Any]) -> str:
 
 def _short(url: str) -> str:
     """URL without the query string - never log credentials or tokens."""
-    return url.split("?", 1)[0]
+    url = url.split("?", 1)[0]
+    scheme, sep, rest = url.partition("://")
+    if sep and "@" in rest.split("/", 1)[0]:
+        rest = "***@" + rest.split("@", 1)[1]
+    return scheme + sep + rest

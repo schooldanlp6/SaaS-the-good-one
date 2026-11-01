@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# make-pub.sh - build an OTA package (saas.pub) from this project folder.
+# make-pub.sh - build an OTA package (UPDATE4SAAS.pub) from this project folder.
 #
-#   ./make-pub.sh                       -> ./saas.pub
+#   ./make-pub.sh                       -> ./UPDATE4SAAS.pub
 #   ./make-pub.sh -o /tmp/x.pub         -> that file
-#   ./make-pub.sh --stick /media/usb/S  -> <stick>/DLP6/Update/saas.pub
+#   ./make-pub.sh --stick /media/usb/S  -> <stick>/DLP6/Update/UPDATE4SAAS.pub
+#   ./make-pub.sh --old-name ...        -> saas.pub instead (for players before 0.6.5)
 #
 # The package is a tar.gz with one top folder (saas-player/), the same layout
 # as the release tarballs; the player accepts zip and tar.gz. Needs only bash
@@ -11,7 +12,9 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-OUT="$ROOT/saas.pub"
+NAME=UPDATE4SAAS.pub
+OUT=""
+STICK=""
 
 die() { echo "make-pub: $*" >&2; exit 1; }
 
@@ -20,11 +23,14 @@ while (($#)); do
 		-o|--output) [[ $# -ge 2 ]] || die "$1 needs a path"; OUT=$2; shift 2 ;;
 		--stick)     [[ $# -ge 2 ]] || die "$1 needs a path"
 		             [[ -d $2 ]] || die "stick path $2 is not a directory"
-		             OUT="$2/DLP6/Update/saas.pub"; shift 2 ;;
-		-h|--help)   sed -n '2,11p' "$0"; exit 0 ;;
+		             STICK=$2; shift 2 ;;
+		--old-name)  NAME=saas.pub; shift ;;
+		-h|--help)   sed -n '2,12p' "$0"; exit 0 ;;
 		*)           die "unknown option $1 (try --help)" ;;
 	esac
 done
+
+if [[ -n $STICK ]]; then OUT="$STICK/DLP6/Update/$NAME"; elif [[ -z $OUT ]]; then OUT="$ROOT/$NAME"; fi
 
 # --- sanity checks --------------------------------------------------------------
 [[ -f $ROOT/VERSION ]] || die "no VERSION file in $ROOT"
@@ -60,9 +66,9 @@ tar -C "$ROOT" \
 	-cf - . | tar -C "$TMP/saas-player" -xf -
 
 mkdir -p "$(dirname "$OUT")"
-tar -C "$TMP" -czf "$TMP/saas.pub" saas-player
-mv "$TMP/saas.pub" "$OUT"
+tar -C "$TMP" -czf "$TMP/pkg.pub" saas-player
+mv "$TMP/pkg.pub" "$OUT"
 sync "$OUT" 2>/dev/null || sync
 
 CODENAME=$(sed -n 's/^CODENAME *= *["'"'"']\([a-z0-9-]*\)["'"'"'].*/\1/p' "$ROOT/saas/version.py" 2>/dev/null)
-echo "saas.pub $VERSION${CODENAME:+ $CODENAME} -> $OUT ($(du -h "$OUT" | cut -f1))"
+echo "$(basename "$OUT") $VERSION${CODENAME:+ $CODENAME} -> $OUT ($(du -h "$OUT" | cut -f1))"

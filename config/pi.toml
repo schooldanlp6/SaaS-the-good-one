@@ -1,5 +1,6 @@
 # Raspberry Pi config. The installer copies this to /etc/saas/config.toml.
 # Check with:  python3 /opt/saas/main.py --config /etc/saas/config.toml --check
+# Servers:     python3 /opt/saas/main.py --config /etc/saas/config.toml --test-network
 
 [audio]
 backend = "mpv"
@@ -33,6 +34,15 @@ liked   = "Liked Songs"   # the like button's playlist
 # This file then holds passwords/keys: install.sh makes it readable for root + saas only.
 #
 # [[network]]
+# type     = "lms"           # Lyrion Music Server (Logitech Media Server)
+# name     = "LMS"
+# url      = "http://192.168.1.10:9000"
+# view     = "folders"       # the server's music folder like a stick; "albums" = album list
+# start    = ""              # folders view only: a sub-folder, e.g. "Rock/Live"
+# user     = ""              # only with LMS password protection on
+# password = ""
+#
+# [[network]]
 # type    = "jellyfin"
 # name    = "Jellyfin"
 # url     = "http://192.168.1.10:8096"
@@ -56,10 +66,11 @@ liked   = "Liked Songs"   # the like button's playlist
 # poll     = 60              # seconds between "still there?" checks (any type)
 
 # OTA updates: put a release package (zip or tar.gz) on a stick as
-# DLP6/Update/saas.pub, press update (U) once to look, again to install.
+# DLP6/Update/UPDATE4SAAS.pub, press update (U) once to look, again to install.
+# (The old name DLP6/Update/saas.pub is always looked for too.)
 [update]
 enabled = true
-file    = "DLP6/Update/saas.pub"
+file    = "DLP6/Update/UPDATE4SAAS.pub"
 
 [state]
 # Resume point per stick (folder, track, title, seconds). Written ONLY on a
@@ -88,8 +99,8 @@ bounce_ms = 30
 
 [inputs.gpio.buttons]
 play_pause  = { pin = 17, hold = "stop" }   # short: play/pause, hold 1 s: stop
-next        = 27
-prev        = 22
+next        = 27   # hold 0.5 s: scrub forward (hold = false: no scrubbing)
+prev        = 22   # hold 0.5 s: scrub backward
 folder_up   = 23
 folder_down = 24
 vol_up      = { pin = 25, repeat = true }   # hold to keep turning up

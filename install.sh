@@ -105,6 +105,7 @@ fi
 say "copying program to $PREFIX"
 rm -rf "$PREFIX/saas" "$PREFIX/.previous"
 cp -r "$SRC/saas" "$SRC/main.py" "$SRC/pctool.py" "$SRC/VERSION" "$PREFIX/"
+if [ -f "$SRC/NOTES" ]; then cp "$SRC/NOTES" "$PREFIX/"; fi
 # Root-run tools live outside /opt/saas: /opt/saas belongs to the saas user (so
 # OTA can update it), and root must never execute files that user can change.
 rm -f "$PREFIX/saas-now.sh" "$PREFIX/uninstall.sh"      # pre-0.6.2 locations
@@ -217,6 +218,11 @@ if [ -n "$OLD_VERSION" ]; then
 		fi
 	fi
 	say "upgrade to $NEW_VERSION done (config kept: $ETC/config.toml)"
+	if [ -f "$PREFIX/NOTES" ]; then
+		printf '\n'
+		cat "$PREFIX/NOTES"
+		printf '\n(read them again any time: %s %s/main.py --notes)\n' "$PY" "$PREFIX"
+	fi
 	exit 0
 fi
 
@@ -231,7 +237,8 @@ Done. Next:
   GPIO check: ls -l /dev/gpiochip*   (should be group gpio, crw-rw----)
   Display:       saas-now        (two status lines for your dashboard)
   Upgrade:       unpack the new version, run its ./install.sh [--offline]
-  OTA:           DLP6/Update/saas.pub on a stick, press update (U) twice
+  OTA:           DLP6/Update/UPDATE4SAAS.pub on a stick, press update (U) twice
+  Release notes: $PY $PREFIX/main.py --notes
   Undo OTA:      saas-rollback
   Uninstall:     saas-uninstall   (--purge also removes config, state, user)
 EOF

@@ -1,0 +1,45 @@
+SaaS 0.6.5 singing-submarine - release notes
+=============================================
+
+New
+---
+* Scrubbing: hold next/prev (buttons 0.5 s, or n/p and the arrow keys) to
+  seek through the song instead of skipping a pile of tracks. Steps grow the
+  longer you hold (2 s, 5 s, 15 s); line 2 shows "» 1:23 / 4:56". It stops
+  1 s before the end and never skips the track.
+* LMS (Lyrion Music Server) as a network source: the server's music folder
+  like a stick (view = "folders", the default) or its album list
+  (view = "albums"). Works with LMS password protection.
+* --test-network: checks every [[network]] server in the config (connect,
+  folders, tags, stream) and says OK or what failed.
+* The update file on the stick is now DLP6/Update/UPDATE4SAAS.pub.
+  DLP6/Update/saas.pub keeps working.
+* These notes: install.sh prints them after an upgrade, and
+  python3 /opt/saas/main.py --notes prints them again.
+* Jellyfin: API calls send the full MediaBrowser Authorization header (the
+  form Jellyfin 12 keeps supporting).
+
+Changed
+-------
+* next/prev buttons are now short/long buttons: a short press acts when you
+  let go, holding scrubs. To get the old press-to-skip back, set e.g.
+  next = { pin = 27, hold = false }
+* Keyboard: a single tap of next/prev acts after your terminal's auto-repeat
+  delay (~0.3-0.7 s). That's how a tap is told apart from a hold.
+
+Recommended (nothing is forced, everything old still works)
+-----------------------------------------------------------
+1. If you updated over a stick: run the installer once as root, so the system
+   parts match this version (rollback tool, and from 0.6.4 the power-off
+   rule and config permissions):
+       su -c '/opt/saas/package/install.sh --offline'
+   (Afterwards saas-rollback can't undo the update anymore - do it once
+   0.6.5 plays fine.)
+2. Name update files UPDATE4SAAS.pub from now on. If your config has
+   file = "DLP6/Update/saas.pub" under [update], you can change it to
+   "DLP6/Update/UPDATE4SAAS.pub" (both names are looked for either way).
+3. Using LMS? Add it to /etc/saas/config.toml (example: config/pi.toml in
+   the release, /opt/saas/package/config/pi.toml after a stick update), then
+   check it as root (the config is only readable for root and saas):
+       su -c 'python3 /opt/saas/main.py -c /etc/saas/config.toml --test-network'
+   The same command also checks your Jellyfin / Navidrome / DLNA entries.

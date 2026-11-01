@@ -160,3 +160,25 @@ def test_led_folder_number_counts_inside_the_view(chip):
                             view_index=1, view_count=2))
     assert chip.outputs[19] and not chip.outputs[26]          # 1 = 0b01
     leds.close()
+
+
+def test_hold_next_scrubs(chip):
+    """0.6.5: holding next repeats seek_fwd (with a growing tick) instead of skipping."""
+    bus = Bus()
+    gi = GpioInput(bus, chip, {"next": btn(27, hold="seek_fwd", hold_time=0.1)})
+    import saas.inputs.gpio as g
+    g.SCRUB_INTERVAL = 0.05
+    try:
+        chip.drive(27, True); time.sleep(0.32); chip.drive(27, False)
+    finally:
+        g.SCRUB_INTERVAL = 0.25
+    got = []
+    while True:
+        item = bus.get(timeout=0.05)
+        if item is None:
+            break
+        got.append(item)
+    assert {e for e, _ in got} == {Event.SEEK_FWD}
+    assert [d for _, d in got] == list(range(len(got))) and len(got) >= 3
+    chip.drive(27, True); chip.drive(27, False)       # a tap is still "next"
+    assert drain(bus) == [Event.NEXT]

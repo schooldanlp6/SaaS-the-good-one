@@ -27,9 +27,11 @@ class Event(enum.Enum):
     PLAYLIST_NEW = "playlist_new"    # create "Playlist N" (next number) and make it active
     SOURCE_NEXT = "source_next"      # cycle through the media present (sticks, ...)
     VIEW_TOGGLE = "view_toggle"      # switch folder navigation: folders <-> playlists
-    UPDATE = "update"                # 1st press: look for DLP6/Update/saas.pub, 2nd: install
+    UPDATE = "update"                # 1st press: look for DLP6/Update/UPDATE4SAAS.pub, 2nd: install
     STANDBY = "standby"              # toggle soft standby (any button wakes)
     POWEROFF = "poweroff"            # save state, then shut the system down
+    SEEK_FWD = "seek_fwd"            # scrub forward; data: tick number while held (speeds up)
+    SEEK_BACK = "seek_back"          # scrub backward
 
     # Internal events.
     TRACK_END = "track_end"          # data: "eof" | "error"
@@ -48,6 +50,7 @@ USER_EVENTS = {
         Event.FOLDER_UP, Event.FOLDER_DOWN, Event.VOL_UP, Event.VOL_DOWN,
         Event.PLAYLIST_ADD, Event.PLAYLIST_NEXT, Event.SOURCE_NEXT, Event.LIKE, Event.VIEW_TOGGLE,
         Event.UPDATE, Event.PLAYLIST_NEW, Event.STANDBY, Event.POWEROFF,
+        Event.SEEK_FWD, Event.SEEK_BACK,
     )
 }
 

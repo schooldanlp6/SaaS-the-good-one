@@ -190,6 +190,9 @@ def main(argv: List[str] = None) -> int:
     ap.add_argument("-c", "--config", default="/etc/saas/config.toml")
     ap.add_argument("--check", action="store_true", help="validate the config and exit")
     ap.add_argument("--version", action="store_true", help="print version + codename and exit")
+    ap.add_argument("--notes", action="store_true", help="print the release notes and exit")
+    ap.add_argument("--test-network", action="store_true",
+                    help="connect to every [[network]] server in the config, try a stream, and exit")
     ap.add_argument("--list-devices", action="store_true", help="list mpv audio devices and exit")
     ap.add_argument("--log-level", default=os.environ.get("SAAS_LOG_LEVEL", "INFO"))
     args = ap.parse_args(argv)
@@ -200,6 +203,17 @@ def main(argv: List[str] = None) -> int:
     if args.version:
         from saas.version import full
         print(f"SaaS {full()}")
+        return 0
+
+    if args.notes:
+        from saas.core.updater import notes_path
+        path = notes_path(os.path.dirname(os.path.abspath(__file__)))
+        try:
+            with open(path or "", encoding="utf-8") as f:
+                print(f.read().rstrip())
+        except OSError:
+            print("no release notes in this install")
+            return 1
         return 0
 
     if args.list_devices:
@@ -218,6 +232,10 @@ def main(argv: List[str] = None) -> int:
     if args.check:
         print("config OK")
         return 0
+    if args.test_network:
+        from saas.net import probe
+        from saas.sources.network import make_factory
+        return probe.run(cfg["network"], make_factory)
     return run(cfg, args.config)
 
 

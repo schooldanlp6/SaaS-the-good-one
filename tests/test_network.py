@@ -57,7 +57,10 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/Audio/"):
             ok = q.get("ApiKey") == KEY and q.get("static") == "true"
             return self._send(200 if ok else 401, AUDIO if ok else {}, "audio/mpeg")
-        if self.headers.get("Authorization") != f'MediaBrowser Token="{KEY}"':
+        auth = self.headers.get("Authorization") or ""
+        scheme, _, fields = auth.partition(" ")
+        pairs = dict(f.strip().split("=", 1) for f in fields.split(",") if "=" in f)
+        if scheme != "MediaBrowser" or pairs.get("Token") != f'"{KEY}"':
             return self._send(401, {})
         if path == "/Users":
             return self._send(200, [{"Name": "Dan", "Id": "u1"}, {"Name": "other", "Id": "u2"}])

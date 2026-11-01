@@ -1,6 +1,6 @@
 # SaaS — ScriptAsASystem
 
-Current release: **0.6.4 janky-jellyfish** (`python3 main.py --version`).
+Current release: **0.6.5 singing-submarine** (`python3 main.py --version`).
 
 A tiny headless music player core in Python. You get buttons, LEDs, a USB stick, and **folders = playlists**. Audio goes out through mpv to any ALSA device (here: a Focusrite Scarlett → Behringer mixer).
 It's built for a Raspberry Pi 1 B+, but the same code runs on a laptop with only the config swapped.
@@ -31,7 +31,9 @@ sudo apt install python3-mpv python3-pytest
 python3 main.py --config config/dev.toml    # set media_root in it first
 ```
 
-Keys: `space` play/pause · `s` stop · `n`/`p` next/prev · `]`/`[` folder up/down · `+`/`-` volume · `a` save/remove song in playlist · `l` next playlist · `c` new playlist · `f` like · `v` folders ⇄ playlists · `*` next medium · `U` update · `z` standby · arrows ←/→ prev/next, ↑/↓ volume · `?` show these keys again · `q` quit.
+Keys: `space` play/pause · `s` stop · `n`/`p` next/prev · `]`/`[` folder up/down · `+`/`-` volume · `a` save/remove song in playlist · `l` next playlist · `c` new playlist · `f` like · `v` folders ⇄ playlists · `*` next medium · `U` update · `z` standby · arrows ←/→ prev/next, ↑/↓ volume · **hold** `n`/`p`/←/→ to scrub · `?` show these keys again · `q` quit.
+
+A terminal only sends key presses (holding a key just auto-repeats it), so SaaS recognises a hold by its rhythm. That's why a single tap of next/prev acts after the auto-repeat delay (~0.3–0.7 s); the delay is measured on your first hold.
 Rename the music folder while it plays to simulate yanking the stick. To test `*`, set `layout = "multi"` and point `media_root` at a folder whose subfolders act as sticks.
 No libmpv? Set `backend = "dummy"` (every track "plays" silently for 10 s).
 
@@ -47,7 +49,7 @@ Everything is done as root (`su -`):
 | **Upgrade** | unpack the new version, run *its* `./install.sh`. It stops the service cleanly (that's when the state is saved), replaces the program, keeps `/etc/saas/config.toml`, and restarts the service if it was running. |
 | **Patches** | drop `*.patch` files into `patches/` before running `./install.sh`. They're applied in name order to a staging copy. A patch that's already contained is skipped, one that doesn't apply exactly stops the install. Your unpacked folder is never modified. |
 | **Offline** | `./install.sh --offline` skips apt (deps already installed / no network). |
-| **OTA** | see below: `DLP6/Update/saas.pub` on a stick, press update twice. |
+| **OTA** | see below: `DLP6/Update/UPDATE4SAAS.pub` on a stick, press update twice. |
 | **Uninstall** | `saas-uninstall` keeps config and state; `--purge` removes everything incl. the `saas` user. Sticks and their playlists are never touched. |
 
 After a fresh install:
@@ -58,14 +60,16 @@ Works on any Debian-based 32-bit system (stock Debian or Raspberry Pi OS Lite; t
 
 **GPIO** goes straight through the kernel's `/dev/gpiochip*` interface (`saas/hw/gpiochip.py`, standard library only), so it needs no gpiozero, no `/dev/mem`, and no root. The installer adds a `gpio` group plus a udev rule for it. Check with `ls -l /dev/gpiochip*`, which should show group `gpio`. If the chip can't be opened, SaaS logs `GPIO disabled: …` and keeps playing without buttons/LEDs.
 
-## Network servers (Jellyfin, Subsonic, DLNA)
+## Network servers (LMS, Jellyfin, Subsonic, DLNA)
 
-Every server in `[[network]]` (examples in `config/pi.toml`) is one more medium for `*`, next to the sticks. Its folders are albums ("Artist - Album"), its tracks are streamed by mpv. The album list loads in a background thread, so a slow server never freezes the buttons. A server that stops answering drops out like a pulled stick (checked every `poll` seconds, 60 by default) and comes back by itself. Resume works per server.
+Every server in `[[network]]` (examples in `config/pi.toml`) is one more medium for `*`, next to the sticks. Its folders are albums ("Artist - Album") or, for LMS, the folders on the server's disk; its tracks are streamed by mpv. The album list loads in a background thread, so a slow server never freezes the buttons. A server that stops answering drops out like a pulled stick (checked every `poll` seconds, 60 by default) and comes back by itself. Resume works per server.
 
+- **LMS (Lyrion Music Server):** `url` (e.g. `http://192.168.1.10:9000`). `view = "folders"` (default) mirrors the server's music folder like a stick, `start = "Rock/Live"` limits it to a sub-folder; `view = "albums"` lists albums. With password protection on, add `user` and `password`. SaaS is just a client here (no Squeezebox player involved); it streams the original files.
 - **Jellyfin:** `url`, `api_key` (Dashboard → API Keys), `user` (needed when there is more than one). Streams the original files, so the Pi decodes them like files from a stick.
 - **Subsonic API** (Navidrome, Airsonic, Gonic, …): `url`, `user`, `password`; token auth by default, `auth = "password"` for servers without it.
 - **DLNA/UPnP:** `location` = the server's description URL, or leave it empty to find servers on the LAN (`server` picks one by name). Set `start` to one view such as `"Music/Folders"`: DLNA servers list the same songs under several views.
 - Playlists, save and like only work on sticks; on a server line 2 says so.
+- **Test your servers:** `python3 /opt/saas/main.py -c /etc/saas/config.toml --test-network` connects to each one, lists its folders, reads the first track's tags and fetches the start of its stream, then says OK or what failed.
 - The config now can hold passwords, so `install.sh` makes it readable for root and `saas` only. Credentials in stream URLs are blanked in the log.
 
 ## Standby and power off
@@ -76,13 +80,13 @@ Every server in `[[network]]` (examples in `config/pi.toml`) is one more medium 
 
 ## OTA updates from a stick
 
-1. Put a release package on any stick as `DLP6/Update/saas.pub`. It can be a zip or a tar.gz; every release comes with a ready-made `saas.pub`.
+1. Put a release package on any stick as `DLP6/Update/UPDATE4SAAS.pub`. It can be a zip or a tar.gz. The old name `DLP6/Update/saas.pub` still works (SaaS before 0.6.5 only knows that one); if both are there, the newer version wins.
 2. Press **update** (`U` / GPIO `update`): line 2 says `Update 0.6.2 found - U to install` (or `Up to date`, `No update on the stick`).
-3. Press it again within 20 s: `Updating to 0.6.2...`. The package is extracted safely (no paths outside, no links, size limit), its `patches/` are applied, then the **new** code validates your config. Only if all of that passes are the program files swapped (old ones → `/opt/saas/.previous`). SaaS then restarts itself (exec, so it works under any init system or when started by hand), resumes the song and shows `Updated to 0.6.2`.
+3. Press it again within 20 s: `Updating to 0.6.2...`. The package is extracted safely (no paths outside, no links, size limit), its `patches/` are applied, then the **new** code validates your config. Only if all of that passes are the program files swapped (old ones → `/opt/saas/.previous`). SaaS then restarts itself (exec, so it works under any init system or when started by hand), resumes the song and shows `Updated to 0.6.2 - see notes`. Every release has a `NOTES` file with what changed and what's recommended: `python3 /opt/saas/main.py --notes` prints it, and `install.sh` prints it after an upgrade.
 
 OTA updates the program in `/opt/saas`, which belongs to the `saas` user. System parts (udev rules, init scripts, packages) need root. If the package changes those, line 2 says `run install.sh for system parts`, and you run `/opt/saas/package/install.sh --offline` as root. Undo an OTA update with `saas-rollback` (as root), then restart SaaS.
 
-**Building a `saas.pub` yourself:** from the project folder run `./make-pub.sh` (writes `saas.pub` next to it), `./make-pub.sh -o /some/file.pub`, or `./make-pub.sh --stick /media/usb/STICK` to put it straight onto a mounted stick as `DLP6/Update/saas.pub`. Bash + tar only. It checks VERSION and the Python syntax first.
+**Building a package yourself:** from the project folder run `./make-pub.sh` (writes `UPDATE4SAAS.pub` next to it), `./make-pub.sh -o /some/file.pub`, or `./make-pub.sh --stick /media/usb/STICK` to put it straight onto a mounted stick as `DLP6/Update/UPDATE4SAAS.pub`. `--old-name` writes `saas.pub` instead, for players before 0.6.5. Bash + tar only. It checks VERSION and the Python syntax first.
 
 `./install.sh --offline` skips apt completely (dependencies already installed, no network) and only checks that python3 and python-mpv are there.
 
@@ -130,7 +134,7 @@ I2C (2/3), SPI (7–11) and UART (14/15) are left free for a display later. Wire
 ## Behaviour
 
 - **Play/pause:** if stopped, it starts (or resumes) the current track.
-- **Next / prev:** prev restarts the track if you're more than 3 s in.
+- **Next / prev:** prev restarts the track if you're more than 3 s in. **Hold** next/prev (button 0.5 s, or the key) to scrub forward/back through the song: 2 s steps, faster the longer you hold (5 s, then 15 s), 4 steps a second; line 2 shows `» 1:23 / 4:56`. Scrubbing stops 1 s before the end and never skips the track. `hold = false` on the button turns it off.
 - **Folder up/down:** jumps to the next/previous folder (or playlist, in the playlists view), wraps around, starts at track 1, and keeps play/pause as it was.
 - **End of a folder:** `continue` (next folder), `repeat`, or `stop`.
 - **Resume:** per stick (recognised by its folder structure), see *State on the SD card* above.
@@ -145,4 +149,4 @@ I2C (2/3), SPI (7–11) and UART (14/15) are left free for a display later. Wire
 
 ## Not yet
 
-Internet radio, audio CD (`cdda://`), an OLED, custom modules (0.6.5 singing-submarine).
+Internet radio, audio CD (`cdda://`), an OLED. Planned for 0.6.6 green-grass: custom modules, a tidier package layout, optional auto-standby.

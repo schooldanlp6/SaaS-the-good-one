@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..backends.base import AudioBackend
 from .events import USER_EVENTS, Bus, Event
@@ -26,6 +26,12 @@ log = logging.getLogger(__name__)
 
 Listener = Callable[[PlayerState], None]
 MAX_REMEMBERED_MEDIA = 20
+
+
+def _clock(seconds: float) -> str:
+    seconds = int(max(0.0, seconds))
+    h, rest = divmod(seconds, 3600)
+    return f"{h}:{rest // 60:02d}:{rest % 60:02d}" if h else f"{rest // 60}:{rest % 60:02d}"
 
 
 def _migrate(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -42,6 +48,8 @@ def _migrate(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 class Player:
+    _scrub: Optional[Tuple[float, float]] = None   # last scrub seek: (target, monotonic time)
+
     def __init__(
         self,
         bus: Bus,
@@ -128,6 +136,8 @@ class Player:
             Event.UPDATE: self._update,
             Event.STANDBY: self._standby,
             Event.POWEROFF: self._poweroff,
+            Event.SEEK_FWD: lambda tick: self._seek(+1, tick),
+            Event.SEEK_BACK: lambda tick: self._seek(-1, tick),
         }
 
     # public API used by main.py -------------------------------------------
@@ -253,6 +263,7 @@ class Player:
         s = self.state
         path = self.library.track_path(s.folder_index, s.track_index)
         self._current_path = path
+        self._scrub = None
         s.title = s.artist = s.album = ""
         s.duration = 0.0
         tags = self.library.track_tags(s.folder_index, s.track_index)
@@ -315,8 +326,9 @@ class Player:
         return PlayerState(volume=s.volume, active_playlist=s.active_playlist,
                            notice=s.notice, notice_time=s.notice_time, standby=s.standby)
 
-    def _notice(self, text: str) -> None:
-        log.info("%s", text)
+    def _notice(self, text: str, log_it: bool = True) -> None:
+        if log_it:
+            log.info("%s", text)
         self.state.notice = text
         self.state.notice_time = time.time()
 
@@ -455,6 +467,30 @@ class Player:
                 self.backend.seek(0)
                 return
         self._step(-1, manual=True)
+
+    def _seek(self, direction: int, tick: Any) -> None:
+        """One scrub step while next/prev is held. Steps grow the longer it is
+        held (tick = 0, 1, 2, ... every ~0.25 s): 2 s, then 5 s, then 15 s."""
+        s = self.state
+        if not self._has_media or s.status not in (PLAYING, PAUSED):
+            return
+        tick = tick if isinstance(tick, int) and tick >= 0 else 0
+        step = 2.0 if tick < 8 else 5.0 if tick < 20 else 15.0
+        now = time.monotonic()
+        # mpv seeks asynchronously: right after a seek, time_pos may still show the
+        # old place, so keep counting from our own target for a moment.
+        if self._scrub is not None and now - self._scrub[1] < 1.0:
+            pos = self._scrub[0]
+        else:
+            pos = self.backend.position() or 0.0
+        target = max(0.0, pos + direction * step)
+        if s.duration > 0:
+            target = min(target, max(0.0, s.duration - 1.0))   # scrubbing never skips the track
+        self.backend.seek(target)
+        self._scrub = (target, now)
+        arrow = "»" if direction > 0 else "«"
+        total = f" / {_clock(s.duration)}" if s.duration > 0 else ""
+        self._notice(f"{arrow} {_clock(target)}{total}", log_it=False)
 
     def _folder(self, delta: int) -> None:
         if self._has_media and self.library.folders:

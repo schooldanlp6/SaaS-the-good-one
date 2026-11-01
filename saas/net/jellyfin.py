@@ -24,7 +24,13 @@ class JellyfinLibrary(NetLibrary):
     def _get(self, path: str, **params):
         sep = "&" if "?" in path else "?"
         url = f"{self.base}{path}{sep + http.query(params) if params else ''}"
-        return http.get_json(url, {"Authorization": f'MediaBrowser Token="{self.api_key}"'})
+        return http.get_json(url, {"Authorization": self._authorization()})
+
+    def _authorization(self) -> str:
+        # The full MediaBrowser form (Jellyfin 12 dropped X-Emby-Token & co., this one stays)
+        from ..version import version
+        return (f'MediaBrowser Token="{self.api_key}", Client="SaaS", Device="SaaS player", '
+                f'DeviceId="{self.fingerprint}", Version="{version()}"')
 
     def ping(self) -> None:
         http.get_json(f"{self.base}/System/Info/Public", timeout=5)

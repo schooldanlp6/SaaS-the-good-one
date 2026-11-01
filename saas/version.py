@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-CODENAME = "janky-jellyfish"
+CODENAME = "singing-submarine"
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

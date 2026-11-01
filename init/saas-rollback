@@ -7,7 +7,7 @@ PREV=$APP/.previous
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 [ -d "$PREV" ] || { echo "nothing to roll back ($PREV is missing)" >&2; exit 1; }
 TMP=$(mktemp -d "$APP/.rollback-XXXXXX")
-for item in saas main.py pctool.py VERSION; do
+for item in saas main.py pctool.py VERSION NOTES; do
 	if [ -e "$APP/$item" ]; then mv "$APP/$item" "$TMP/$item"; fi
 	if [ -e "$PREV/$item" ]; then mv "$PREV/$item" "$APP/$item"; fi
 done

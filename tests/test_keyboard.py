@@ -76,3 +76,73 @@ def test_arrow_keys_dont_trigger_folder_down(tmp_path):
     os.close(w)
     t.join(2)
     assert got == [Event.VOL_UP, Event.VOL_DOWN, Event.NEXT, Event.PREV, Event.VOL_UP, Event.FOLDER_DOWN]
+
+
+def _simulate(times_keys, until):
+    """Run HoldDetector over (time, key) arrivals and poll in 10 ms steps."""
+    from saas.inputs.keyboard import HoldDetector
+    hd, out, t, items = HoldDetector(), [], 0.0, list(times_keys)
+    while t <= until:
+        while items and items[0][0] <= t:
+            at, key = items.pop(0)
+            out += hd.feed(key, at)
+        out += hd.poll(t)
+        t = round(t + 0.01, 3)
+    return out, hd
+
+
+def test_tap_is_next_after_window():
+    out, _ = _simulate([(0.0, "next")], 2.0)
+    assert out == [("next", None)]
+
+
+def test_double_tap_is_two_skips():
+    out, _ = _simulate([(0.0, "next"), (0.3, "next")], 2.0)
+    assert out == [("next", None), ("next", None)]
+
+
+def test_hold_scrubs_and_learns_delay():
+    # press, auto-repeat after 0.5 s, then every 33 ms for ~1.5 s
+    arrivals = [(0.0, "prev")] + [(round(0.5 + i * 0.033, 3), "prev") for i in range(45)]
+    out, hd = _simulate(arrivals, 3.0)
+    assert all(name == "seek_back" for name, _ in out)          # no skipping at all
+    ticks = [d for _, d in out]
+    assert ticks == list(range(len(ticks))) and 5 <= len(ticks) <= 8   # ~4 per second
+    assert abs(hd.window - 0.62) < 0.02
+
+
+def test_tap_then_hold_and_other_keys():
+    # tap at 0, press again at 0.4, its auto-repeat starts 0.5 s later
+    arrivals = [(0.0, "next"), (0.4, "next")] + [(round(0.9 + i * 0.033, 3), "next") for i in range(30)]
+    arrivals += [(2.0, "vol_up")]
+    out, _ = _simulate(arrivals, 3.0)
+    assert out[0] == ("next", None)       # the separate tap still skips once
+    assert {n for n, _ in out[1:-1]} == {"seek_fwd"}
+    assert out[-1] == ("vol_up", None)
+
+
+def test_held_arrow_scrubs_through_the_real_read_loop():
+    """A held → arrives as ESC[C, pause, then fast repeats: only seek_fwd, no skips."""
+    import threading
+    from saas.core.events import Event
+    r, w = os.pipe()
+    kb = KeyboardInput(Bus())
+    kb._fd = r
+    got = []
+    kb.bus.emit = lambda e, data=None: got.append((e, data))
+    t = threading.Thread(target=kb._run, daemon=True)
+    t.start()
+    os.write(w, b"\x1b[C")
+    time.sleep(0.45)
+    for _ in range(30):
+        os.write(w, b"\x1b[C")
+        time.sleep(0.033)
+    time.sleep(0.6)
+    os.write(w, b"n")                 # a plain tap afterwards still skips
+    time.sleep(1.0)
+    os.close(w)
+    t.join(2)
+    assert got[-1] == (Event.NEXT, None)
+    scrub = got[:-1]
+    assert scrub and all(e == Event.SEEK_FWD for e, _ in scrub)
+    assert [d for _, d in scrub] == list(range(len(scrub)))

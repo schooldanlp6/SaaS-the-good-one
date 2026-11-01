@@ -4,6 +4,8 @@ internal pull-up on, no resistors needed). Debouncing is done by the kernel.
 Per button, one of:
   * plain:   event on press
   * hold:    short press -> event (on release), long press -> hold event
+             (seek_fwd / seek_back as hold events repeat every 0.25 s while
+             held: that's how next/prev scrub through a song)
   * repeat:  event on press, then repeated every hold_time while held (volume)
 """
 from __future__ import annotations
@@ -17,6 +19,9 @@ from .base import Input
 
 log = logging.getLogger(__name__)
 
+SCRUB_INTERVAL = 0.25
+_REPEATING_HOLDS = (Event.SEEK_FWD, Event.SEEK_BACK)
+
 
 class GpioInput(Input):
     def __init__(self, bus: Bus, chip: Any, buttons: Dict[str, Dict[str, Any]], bounce_ms: int = 30) -> None:
@@ -27,6 +32,7 @@ class GpioInput(Input):
         self._down: Set[int] = set()
         self._held: Set[int] = set()
         self._gen: Dict[int, int] = {}
+        self._tick: Dict[int, int] = {}
         self._lock = threading.Lock()
         chip.watch_inputs(sorted(self._buttons), bounce_ms, self._edge)
         for pin, (event, spec) in sorted(self._buttons.items()):
@@ -72,8 +78,15 @@ class GpioInput(Input):
                 self.bus.emit(event)
                 self._arm(pin, spec["hold_time"])
             else:
-                self._held.add(pin)
-                self.bus.emit(parse_event(spec["hold"]))
+                hold = parse_event(spec["hold"])
+                if hold in _REPEATING_HOLDS:
+                    tick = self._tick[pin] = self._tick.get(pin, -1) + 1 if pin in self._held else 0
+                    self._held.add(pin)
+                    self.bus.emit(hold, tick)
+                    self._arm(pin, SCRUB_INTERVAL)
+                else:
+                    self._held.add(pin)
+                    self.bus.emit(hold)
 
     def close(self) -> None:
         with self._lock:

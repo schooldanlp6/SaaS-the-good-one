@@ -77,6 +77,10 @@ def make_factory(spec: dict) -> Callable[[], NetLibrary]:
         from ..net.subsonic import SubsonicLibrary
         return lambda: SubsonicLibrary(spec["name"], spec["url"], spec["user"], spec["password"],
                                        spec.get("auth", "token"))
+    if kind == "lms":
+        from ..net.lms import LmsLibrary
+        return lambda: LmsLibrary(spec["name"], spec["url"], spec.get("view", "folders"), spec.get("start", ""),
+                                  spec.get("user", ""), spec.get("password", ""))
     if kind == "dlna":
         from ..net.dlna import DlnaLibrary
         return lambda: DlnaLibrary(spec["name"], spec.get("location", ""), spec.get("server", ""),

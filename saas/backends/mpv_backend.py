@@ -40,9 +40,13 @@ def _end_reason(event: Any) -> Optional[int]:
 _SECRET = re.compile(r"(?i)\b(apikey|api_key|t|s|p|token)=[^&\s'\"]+")
 
 
+_USERINFO = re.compile(r"(?i)\b(https?://)[^/@\s'\"]+@")
+
+
 def redact(text: str) -> str:
-    """Stream URLs carry credentials (Jellyfin ApiKey, Subsonic token/salt) - never log them."""
-    return _SECRET.sub(lambda m: m.group(1) + "=***", text)
+    """Stream URLs carry credentials (Jellyfin ApiKey, Subsonic token/salt,
+    LMS user:password@) - never log them."""
+    return _USERINFO.sub(r"\1***@", _SECRET.sub(lambda m: m.group(1) + "=***", text))
 
 
 def _log_handler(level: str, prefix: str, text: str) -> None:
